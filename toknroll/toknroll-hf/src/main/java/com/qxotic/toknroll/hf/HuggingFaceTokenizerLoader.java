@@ -611,9 +611,62 @@ public final class HuggingFaceTokenizerLoader {
         return adaptRegexForJava(pattern);
     }
 
+    /**
+     * Sparsity allowance for the token-id space, relative to the number of ids the file actually
+     * declares.
+     *
+     * <p>In the HuggingFace format ids are VALUES, not array indices, so a single vocabulary entry
+     * decides an allocation. That is unlike the GGUF path, where ids are positions in a list and
+     * the array is sized by the list itself. A well-formed {@code tokenizer.json} is dense by
+     * construction -- {@code model.vocab} runs 0..N-1 and {@code added_tokens} continue above it --
+     * and the only legitimate source of gaps is vocabulary padding for tensor alignment, which is a
+     * small multiple at most. Allowing 8x plus a floor accepts any plausible real file while
+     * refusing one whose declared id space is not corroborated by its own contents.
+     *
+     * <p>This is a cheap well-formedness bound, not a security boundary. It cannot tell a slow
+     * tokenizer from a fast one, or a hostile regex from a benign one.
+     */
+    private static final int ID_SPARSITY_ALLOWANCE = 8;
+
+    /** Floor so that tiny but legitimate vocabularies are not squeezed by the ratio alone. */
+    private static final int ID_SPACE_FLOOR = 1024;
+
+    /**
+     * Bounds a declared token id against the number of ids the file actually declares, and refuses
+     * a negative one.
+     *
+     * @param id the declared id
+     * @param declaredCount how many ids this file declares in total
+     * @param where a JSON path fragment for the failure message
+     */
+    private static void checkTokenId(int id, int declaredCount, String where) {
+        if (id < 0) {
+            throw new IllegalArgumentException(where + " must be non-negative, got " + id);
+        }
+        // declaredCount is bounded by the parsed document, so this product cannot overflow for any
+        // document small enough to have been parsed; the long cast documents that rather than
+        // relying on it.
+        long limit = (long) declaredCount * ID_SPARSITY_ALLOWANCE + ID_SPACE_FLOOR;
+        if (id >= limit) {
+            throw new IllegalArgumentException(
+                    where
+                            + " is "
+                            + id
+                            + ", which exceeds the bound of "
+                            + limit
+                            + " implied by the "
+                            + declaredCount
+                            + " id(s) this file declares. A token array sized from that id would be"
+                            + " almost entirely empty, so the file is malformed.");
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static TokenEntries buildTokenEntries(
             Map<String, Object> vocabMap, Object addedTokensObj) {
+        int addedCount = (addedTokensObj instanceof List<?>) ? ((List<?>) addedTokensObj).size() : 0;
+        int declaredCount = vocabMap.size() + addedCount;
+
         int maxId = -1;
         for (Map.Entry<String, Object> e : vocabMap.entrySet()) {
             Object value = e.getValue();
@@ -621,7 +674,9 @@ public final class HuggingFaceTokenizerLoader {
                 throw new IllegalArgumentException(
                         "tokenizer.json:model.vocab['" + e.getKey() + "'] must be numeric");
             }
-            maxId = Math.max(maxId, ((Number) value).intValue());
+            int id = ((Number) value).intValue();
+            checkTokenId(id, declaredCount, "tokenizer.json:model.vocab['" + e.getKey() + "']");
+            maxId = Math.max(maxId, id);
         }
 
         String[] tokens = new String[maxId + 1];
@@ -645,6 +700,9 @@ public final class HuggingFaceTokenizerLoader {
                 }
 
                 int id = ((Number) idObj).intValue();
+                // Same shape as model.vocab above: this id decides an Arrays.copyOf, and it sits in
+                // a loop, so an unbounded one can be paid repeatedly within a single file.
+                checkTokenId(id, declaredCount, "tokenizer.json:added_tokens[].id");
                 if (id >= tokens.length) {
                     int oldLength = tokens.length;
                     tokens = Arrays.copyOf(tokens, id + 1);
