@@ -163,10 +163,11 @@ class HuggingFaceTokenizerLoaderValidationTest {
         // in the id space, so a check that only ever refuses would be worse than the bug it fixes.
         // A full byte-level vocab (256 ids) plus a token parked well above it MUST still load.
         // If the bound is ever tightened past what real files do, this is what fails.
-        String vocab =
-                HuggingFaceTokenizerTestFixtures.buildByteLevelVocab(Map.of("<pad>", 1500));
+        String vocab = HuggingFaceTokenizerTestFixtures.buildByteLevelVocab(Map.of("<pad>", 1500));
         String json =
-                "{\"model\":" + HuggingFaceTokenizerTestFixtures.buildBpeModel(vocab, "[]", "") + "}";
+                "{\"model\":"
+                        + HuggingFaceTokenizerTestFixtures.buildBpeModel(vocab, "[]", "")
+                        + "}";
         Path file = tempDir.resolve("tokenizer.json");
         Files.writeString(file, json);
         assertNotNull(HuggingFaceTokenizerLoader.fromLocal(file));

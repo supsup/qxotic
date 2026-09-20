@@ -664,7 +664,8 @@ public final class HuggingFaceTokenizerLoader {
     @SuppressWarnings("unchecked")
     private static TokenEntries buildTokenEntries(
             Map<String, Object> vocabMap, Object addedTokensObj) {
-        int addedCount = (addedTokensObj instanceof List<?>) ? ((List<?>) addedTokensObj).size() : 0;
+        int addedCount =
+                (addedTokensObj instanceof List<?>) ? ((List<?>) addedTokensObj).size() : 0;
         int declaredCount = vocabMap.size() + addedCount;
 
         int maxId = -1;
