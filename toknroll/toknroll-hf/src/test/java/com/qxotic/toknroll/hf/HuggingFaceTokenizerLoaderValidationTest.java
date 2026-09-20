@@ -72,7 +72,16 @@ class HuggingFaceTokenizerLoaderValidationTest {
         String json = "{\"model\":{\"type\":\"BPE\",\"vocab\":{\"a\":2147483000},\"merges\":[]}}";
         Path file = tempDir.resolve("tokenizer.json");
         Files.writeString(file, json);
-        assertThrows(RuntimeException.class, () -> HuggingFaceTokenizerLoader.fromLocal(file));
+        // Assert the MESSAGE, not the type. A type-only assertion does not discriminate:
+        // unpatched, this path can surface as a wrapped or unwrapped failure of several kinds,
+        // and at least one of them is itself a RuntimeException. Only the bound's own wording
+        // proves the bound ran.
+        RuntimeException thrown =
+                assertThrows(
+                        RuntimeException.class, () -> HuggingFaceTokenizerLoader.fromLocal(file));
+        assertTrue(
+                describe(thrown).contains("exceeds the bound of"),
+                () -> "expected the id-space bound refusal, got: " + describe(thrown));
     }
 
     @Test
@@ -82,7 +91,16 @@ class HuggingFaceTokenizerLoaderValidationTest {
         String json = "{\"model\":{\"type\":\"BPE\",\"vocab\":{\"a\":2147483647},\"merges\":[]}}";
         Path file = tempDir.resolve("tokenizer.json");
         Files.writeString(file, json);
-        assertThrows(RuntimeException.class, () -> HuggingFaceTokenizerLoader.fromLocal(file));
+        // Assert the MESSAGE, not the type. A type-only assertion does not discriminate:
+        // unpatched, this path can surface as a wrapped or unwrapped failure of several kinds,
+        // and at least one of them is itself a RuntimeException. Only the bound's own wording
+        // proves the bound ran.
+        RuntimeException thrown =
+                assertThrows(
+                        RuntimeException.class, () -> HuggingFaceTokenizerLoader.fromLocal(file));
+        assertTrue(
+                describe(thrown).contains("exceeds the bound of"),
+                () -> "expected the id-space bound refusal, got: " + describe(thrown));
     }
 
     @Test
@@ -111,7 +129,16 @@ class HuggingFaceTokenizerLoaderValidationTest {
                         + "\"added_tokens\":[{\"id\":2147483000,\"content\":\"<x>\"}]}";
         Path file = tempDir.resolve("tokenizer.json");
         Files.writeString(file, json);
-        assertThrows(RuntimeException.class, () -> HuggingFaceTokenizerLoader.fromLocal(file));
+        // Assert the MESSAGE, not the type. A type-only assertion does not discriminate:
+        // unpatched, this path can surface as a wrapped or unwrapped failure of several kinds,
+        // and at least one of them is itself a RuntimeException. Only the bound's own wording
+        // proves the bound ran.
+        RuntimeException thrown =
+                assertThrows(
+                        RuntimeException.class, () -> HuggingFaceTokenizerLoader.fromLocal(file));
+        assertTrue(
+                describe(thrown).contains("exceeds the bound of"),
+                () -> "expected the id-space bound refusal, got: " + describe(thrown));
     }
 
     @Test
