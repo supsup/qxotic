@@ -139,3 +139,7 @@ bench-results/
 .ci-empty-hf-home/
 .ci-no-models/
 .ci-toknroll-cache/
+
+# Downloadable tiktoken encodings used by benchmarks; fetched, never vendored.
+# See ToknrollVsJtokkitCountBenchmark's javadoc for the curl.
+/toknroll/toknroll-benchmarks/src/test/resources/tiktoken/
