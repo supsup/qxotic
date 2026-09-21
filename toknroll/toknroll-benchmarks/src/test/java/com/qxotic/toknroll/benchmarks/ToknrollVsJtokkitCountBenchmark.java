@@ -10,12 +10,11 @@ import java.util.Arrays;
 /**
  * Apples-to-apples: toknroll's TiktokenModel vs jtokkit, SAME encoding (r50k_base), same corpus.
  *
- * <p>Requires the r50k_base encoding on the test classpath, which this repo deliberately does not
- * vendor:
+ * <p>Requires the r50k_base encoding in {@code test-fixtures/tiktoken}, which this repo downloads
+ * rather than vendors (the directory is already gitignored):
  *
  * <pre>
- *   curl -sL -o toknroll/toknroll-benchmarks/src/test/resources/tiktoken/r50k_base.tiktoken \
- *     https://openaipublic.blob.core.windows.net/encodings/r50k_base.tiktoken
+ *   python3 toknroll/scripts/download_tiktoken_fixtures.py
  * </pre>
  *
  * <p>An earlier run compared jtokkit's built-in tiktoken path against toknroll loaded through the
