@@ -203,6 +203,63 @@ class HuggingFaceTokenizerLoaderFeaturesTest {
         assertArrayEquals(new int[] {256}, tokenizer.encode("ab").toArray());
     }
 
+    /**
+     * The three tests below pin ByteLevel's SPLITTING. A ByteLevel pre-tokenizer carries a {@code
+     * use_regex} flag that defaults to TRUE and applies the GPT-2 pattern; the loader used to
+     * ignore it and pass the whole input through as one chunk.
+     *
+     * <p>Each case is built so the two behaviours give DIFFERENT token arrays: the vocabulary holds
+     * {@code "a" + newline} as a single entry, which is reachable only if nothing splits between
+     * the letter and the newline.
+     */
+    @Test
+    void byteLevelPreTokenizerAppliesTheGpt2SplitPatternByDefault() throws IOException {
+        Path tokenizerJson =
+                writeTokenizerJson(
+                        buildTokenizerJson(
+                                buildBpeModel(
+                                        buildByteLevelVocab(Map.of("aĊ", 256)),
+                                        "[]",
+                                        ",\"ignore_merges\":true"),
+                                "\"pre_tokenizer\":{\"type\":\"ByteLevel\"}"));
+
+        Tokenizer tokenizer = HuggingFaceTokenizerLoader.fromLocal(tokenizerJson);
+        // 97 = 'a', 10 = '\n': split, so the combined entry at 256 is never reached.
+        assertArrayEquals(new int[] {97, 10}, tokenizer.encode("a\n").toArray());
+    }
+
+    @Test
+    void byteLevelPreTokenizerAppliesTheGpt2SplitPatternWhenUseRegexIsExplicitlyTrue()
+            throws IOException {
+        Path tokenizerJson =
+                writeTokenizerJson(
+                        buildTokenizerJson(
+                                buildBpeModel(
+                                        buildByteLevelVocab(Map.of("aĊ", 256)),
+                                        "[]",
+                                        ",\"ignore_merges\":true"),
+                                "\"pre_tokenizer\":{\"type\":\"ByteLevel\",\"use_regex\":true}"));
+
+        Tokenizer tokenizer = HuggingFaceTokenizerLoader.fromLocal(tokenizerJson);
+        assertArrayEquals(new int[] {97, 10}, tokenizer.encode("a\n").toArray());
+    }
+
+    @Test
+    void byteLevelPreTokenizerHonoursUseRegexFalse() throws IOException {
+        Path tokenizerJson =
+                writeTokenizerJson(
+                        buildTokenizerJson(
+                                buildBpeModel(
+                                        buildByteLevelVocab(Map.of("aĊ", 256)),
+                                        "[]",
+                                        ",\"ignore_merges\":true"),
+                                "\"pre_tokenizer\":{\"type\":\"ByteLevel\",\"use_regex\":false}"));
+
+        Tokenizer tokenizer = HuggingFaceTokenizerLoader.fromLocal(tokenizerJson);
+        // use_regex:false is the one configuration where the whole input stays a single chunk.
+        assertArrayEquals(new int[] {256}, tokenizer.encode("a\n").toArray());
+    }
+
     @Test
     void supportsMetaspacePreTokenizerDecodeWrapper() throws IOException {
         // Metaspace tokens use U+2581 which is not a valid byte-level symbol.
