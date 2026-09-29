@@ -18,8 +18,12 @@ public final class FfmpegAudioDecoder implements AudioDecoder {
     /** gemma4ua and every other speech encoder fix the input at 16 kHz mono. */
     public static final int SAMPLE_RATE = 16000;
 
-    /** Ten minutes of mono speech; the public float representation occupies about 37 MiB. */
-    static final int MAX_SAMPLES = SAMPLE_RATE * 60 * 10;
+    /**
+     * The longest audio decoded into memory, an hour by default, which the float representation
+     * holds in about 220 MiB. {@code -Djinfer.codecs.maxAudioMinutes} raises or lowers it.
+     */
+    static final int MAX_SAMPLES =
+            SAMPLE_RATE * 60 * Math.max(1, Integer.getInteger("jinfer.codecs.maxAudioMinutes", 60));
 
     @Override
     public String name() {
@@ -37,8 +41,20 @@ public final class FfmpegAudioDecoder implements AudioDecoder {
     }
 
     private static byte[] run(String input, byte[] data) throws IOException {
-        return Subprocess.run(
-                ffmpegArgs(input), data, Duration.ofMinutes(2), Math.multiplyExact(MAX_SAMPLES, 4));
+        try {
+            return Subprocess.run(
+                    ffmpegArgs(input),
+                    data,
+                    Duration.ofMinutes(2),
+                    Math.multiplyExact(MAX_SAMPLES, 4));
+        } catch (IOException tooLong) {
+            if (!String.valueOf(tooLong.getMessage()).contains("exceeds")) throw tooLong;
+            throw new IOException(
+                    "audio longer than "
+                            + MAX_SAMPLES / SAMPLE_RATE / 60
+                            + " minutes: raise -Djinfer.codecs.maxAudioMinutes",
+                    tooLong);
+        }
     }
 
     private static List<String> ffmpegArgs(String input) {
@@ -64,6 +80,10 @@ public final class FfmpegAudioDecoder implements AudioDecoder {
         int n = raw.length / 4; // 4 bytes per float32 sample
         float[] pcm = new float[n];
         ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(pcm);
+        // float decoding overshoots [-1,1] wherever the source clips, so the samples land in
+        // range here rather than failing a whole recording over a few loud ones
+        for (int i = 0; i < n; i++)
+            pcm[i] = Float.isFinite(pcm[i]) ? Math.clamp(pcm[i], -1f, 1f) : 0f;
         return new Media.Audio(pcm, SAMPLE_RATE, 1);
     }
 }

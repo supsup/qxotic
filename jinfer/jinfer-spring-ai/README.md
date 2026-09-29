@@ -83,6 +83,7 @@ The starter creates beans from these properties:
 | Embeddings | `spring.ai.model.embedding=jinfer` | `spring.ai.jinfer.embedding.model` |
 | Reranking | configured when a model is present | `spring.ai.jinfer.rerank.model` |
 | Speech | configured when a model is present | `spring.ai.jinfer.speech.model` |
+| Transcription | configured when a model is present | `spring.ai.jinfer.transcription.model` |
 
 Chat is enabled when its model is configured and no other chat provider is selected.
 Model sources may be remote references or local paths and resolve during application startup.
@@ -109,7 +110,7 @@ Import the Spring AI and jinfer BOMs, then add the starter and model providers:
     <dependency>
       <groupId>com.qxotic</groupId>
       <artifactId>jinfer-bom</artifactId>
-      <version>0.2.0</version>
+      <version>0.3.0</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -131,7 +132,7 @@ Import the Spring AI and jinfer BOMs, then add the starter and model providers:
 `jinfer-models-all` includes the providers used by the examples below, not model weights.
 Only the models you load are downloaded.
 The BOMs manage versions; they do not add dependencies.
-Without them, pin `0.2.0` on each jinfer dependency and `2.0.1` on each Spring AI one.
+Without them, pin `0.3.0` on each jinfer dependency and `2.0.1` on each Spring AI one.
 
 Optional runtime backends are `jam-native` (hand-tuned SIMD) and `jam-vector` (Panama Vector API):
 
@@ -159,7 +160,7 @@ For scripts that use the core Spring AI provider without Spring Boot:
 //JAVA 25
 //JAVAC_OPTIONS -parameters
 //RUNTIME_OPTIONS --add-modules jdk.incubator.vector --enable-native-access=ALL-UNNAMED
-//DEPS com.qxotic:jinfer-bom:0.2.0@pom
+//DEPS com.qxotic:jinfer-bom:0.3.0@pom
 //DEPS com.qxotic:jinfer-spring-ai com.qxotic:jinfer-models-all
 //DEPS org.springframework.ai:spring-ai-client-chat:2.0.1
 //DEPS org.springframework.ai:spring-ai-rag:2.0.1
@@ -372,6 +373,23 @@ try (var speech = JinferSpeechModel.builder()
 Chunks may include silence and do not necessarily align with sentences.
 In a WebFlux application, inject the Spring-managed `TextToSpeechModel` and return its `Flux` from the handler.
 Block only at an imperative boundary such as this standalone example, never on a WebFlux event-loop thread.
+
+## Transcription
+
+`JinferTranscriptionModel` implements Spring AI's `TranscriptionModel`:
+
+```java
+try (var transcriber = JinferTranscriptionModel.builder()
+        .model("mudler/parakeet-cpp-gguf/tdt-0.6b-v3-q8_0.gguf")
+        .build()) {
+
+    System.out.println(transcriber.transcribe(new FileSystemResource("speech.wav")));
+}
+```
+
+The `Resource` may hold any format `jinfer-codecs` decodes.
+The typed `transcribe(Path)` and `transcribe(byte[])` doors return the full jinfer
+`Transcription`, with per-token spans, confidences and `words()` grouping.
 
 Kokoro takes its voice as a companion, the same way; `espeak-ng` must be on `PATH`:
 

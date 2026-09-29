@@ -62,10 +62,19 @@ Smoke-test any native executables intended for distribution on their target plat
 ## Before publishing
 
 - Review [release notes](RELEASE-NOTES.md), supported model families, API documentation and known limitations.
-- Confirm the intended version and `project.build.outputTimestamp`; do not change them as a side effect of QA.
+- Confirm the intended versions and `project.build.outputTimestamp`; do not change them as a side effect of QA. Each project (gguf, json, safetensors, jota, jam, toknroll, jinfer) releases on the version its own root POM declares, and a project without changes since its last tag is not republished. A bump is two edits: that POM and the matching `<project>.version` in the root POM, which is where the others resolve it; `jinfer-bom` names the same versions for consumers.
 - Inspect the artifacts that opt into publication, including POM dependencies, source and Javadoc JARs, LICENSE and NOTICE files, and native-library contents.
 - Run the signing-enabled release verification with the configured release key, without `gpg.skip` or native-check bypasses.
 - Resolve failures and document coverage gaps before deciding whether to release.
+- Stage only the project whose version moved. Central rejects a coordinate it already holds and one rejection fails the whole bundle, so deploying from the repository root, which restages every artifact that opts into publication, is wrong. Publish one project at a time:
+
+```sh
+mvn -Prelease install -DskipTests            # once, so the projects not being released resolve
+make release-deploy PROJECT=jinfer CHECK=--check   # what it would stage, and whether Central has it
+make release-deploy PROJECT=jinfer
+```
+
+It builds only that project's reactor and refuses before uploading anything if one of its coordinates is already published.
 
 Publishing and tagging are separate, explicit maintainer actions.
 The release profile leaves publication approval manual in Central (`autoPublish=false`); `deploy` still uploads artifacts and must not be used as a local QA check.

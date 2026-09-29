@@ -15,7 +15,7 @@ AI on the JVM, just a Maven dependency away.
 
 ## Highlights
 
-- **Multimodal support.** Vision, audio, video, embeddings for RAG, text-to-speech.
+- **Multimodal support.** Vision, audio, video, embeddings for RAG, text-to-speech, speech-to-text.
 - **Supports popular Java AI frameworks.** [LangChain4j](jinfer-langchain4j/README.md) and
   [Spring AI](jinfer-spring-ai/README.md) providers and an [OpenAI-compatible server](./jinfer-server).
 - **Top performance.** Efficient prompt caching, speculative decoding, Matryoshka embeddings and optional hand-tuned native kernels from [JAM](../jam), with a performant Vector API fallback.
@@ -42,6 +42,7 @@ AI on the JVM, just a Maven dependency away.
 | [NVIDIA Nemotron-H](https://arxiv.org/abs/2504.03624) | chat | `jinfer-nemotronh` |
 | [Owen Song's Inflect](https://github.com/owenawsong/Inflect) | speech synthesis | `jinfer-inflect2` |
 | [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) | speech synthesis | `jinfer-kokoro` |
+| [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | speech recognition | `jinfer-parakeet` |
 
 Supported quantizations: `Q4_0`, `Q5_0`, `Q4_K`, `Q5_K`, `Q6_K`, `Q8_0`, `MXFP4` and the dense `F32`, `F16`, `BF16`.  
 Jinfer recommends `Q8_0` for its balance of quality and performance.
@@ -73,7 +74,7 @@ Import the BOM once:
     <dependency>
       <groupId>com.qxotic</groupId>
       <artifactId>jinfer-bom</artifactId>
-      <version>0.2.0</version>
+      <version>0.3.0</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -237,9 +238,55 @@ try (var speech = JinferSpeechModel.builder()
 }
 ```
 
+**Speech-to-text.** Transcription with word timing, faster than realtime on the CPU:
+
+```java
+try (var transcriber = JinferTranscriptionModel.builder()
+        .model("mudler/parakeet-cpp-gguf/tdt-0.6b-v3-q8_0.gguf")
+        .build()) {
+
+    System.out.println(transcriber.transcribe(Path.of("speech.wav")).text());
+}
+```
+
+The same model behind the CLI's `transcribe` command handles audio files, while `server` serves an
+OpenAI-compatible `POST /v1/audio/transcriptions` (multipart; `response_format` of `json`,
+`text`, or `verbose_json` with word timestamps).
+
+**Streaming transcription.** Feed audio as it arrives and poll the evolving transcript; text
+behind the commit horizon no longer changes, and `finish()` equals the offline transcript:
+
+```java
+try (var state = parakeet.newState(); var stream = parakeet.stream(state)) {
+    while (capturing) {
+        stream.feed(nextPcmChunk);
+        display(stream.partial().text());
+    }
+    System.out.println(stream.finish().text());
+}
+```
+
+Or from a microphone straight through the CLI, live partials on stderr:
+
+```bash
+ffmpeg -nostats -loglevel error -f avfoundation -i ":0" -ar 16000 -ac 1 -f s16le - \
+  | jinfer -m parakeet.gguf transcribe - --raw-pcm
+```
+
+On a terminal the partials render as one status line updated in place; redirected stderr gets one
+line per partial instead, so scripts can follow along.
+
 ## Chat CLI
 
-To test different models, a simple CLI is bundled, can chat with all the supported models. 
+To test different models, a simple CLI is bundled, can chat with all the supported models.
+It is published as a single executable jar, so [JBang](https://www.jbang.dev/) runs it without a
+checkout, in this mode and in the server, transcription and speech synthesis modes:
+
+```bash
+jbang jinfer@qxoticai chat --model LiquidAI/LFM2.5-350M-GGUF:Q8_0
+```
+
+From a checkout, build it and run the jar:
 
 ```bash
 mvn -pl jinfer/jinfer-cli -am package -DskipTests
@@ -248,13 +295,59 @@ java \
   --add-modules jdk.incubator.vector \
   -jar jinfer/jinfer-cli/target/jinfer.jar \
   --model LiquidAI/LFM2.5-350M-GGUF:Q8_0 \
-  --chat
+  chat
 ```
+
+## Text-to-speech CLI
+
+Use `speak` with a speech model and `--output` to write a 16-bit PCM WAV:
+
+```bash
+jbang jinfer@qxoticai -m remixerdec/Inflect-Nano-v2-GGUF:Q8_0 \
+  speak "Hello world." --output hello.wav --speed 1.2
+
+jbang jinfer@qxoticai -m simonfxr/kokoro.cpp-GGUF/kokoro-82m-q8_0.gguf \
+  --with voice=simonfxr/kokoro.cpp-GGUF/voices/kokoro-voice-af_heart.gguf \
+  speak "Hello from Kokoro." --output kokoro.wav
+```
+
+Local model and companion paths work too.
+Kokoro requires a `voice` companion; Inflect2 optionally accepts a pronunciation lexicon via `--with lexicon=<path|ref>`.
+`--speed` selects a positive speaking-rate multiplier within the model's supported range; omitted, it uses the model's default.
+Without `--output`, speech is played after synthesis.
+
+Use `--stream` to start playback with the first clip while later clips are synthesized:
+
+```bash
+jinfer -m inflect.gguf speak "Hello world."
+jinfer -m inflect.gguf speak "Hello world. Here is the next sentence." --stream
+```
+
+Both playback modes support Linux, macOS and Windows:
+
+| Platform | Playback backend | Requirement |
+|----------|------------------|-------------|
+| Linux | `aplay`, falling back to `ffplay` if unavailable | Install ALSA utilities or FFmpeg with `ffplay` |
+| macOS | `afplay`, falling back to `ffplay` if unavailable | `afplay` is built in |
+| Windows | Windows PowerShell's `.NET SoundPlayer`, falling back to `ffplay` if unavailable | Windows PowerShell is built in |
+
+Streaming feeds continuous PCM on Linux; macOS and Windows play WAV clips while synthesizing one clip ahead.
+Players must be available on `PATH`; a player that launches but fails reports its error.
+Choose playback or `--output`; they cannot be combined.
+Use `--stream` to enable streaming or `--no-stream` to disable it; these switches take no values.
+
+`speak -` reads UTF-8 text from stdin, and `--output -` writes WAV bytes to stdout, with diagnostics on stderr:
+
+```bash
+jinfer -m inflect.gguf speak - --output - < story.txt > story.wav
+```
+
+The same flags work with the executable jar shown above.
 
 ## OpenAI-compatible server
 
 A simple OpenAI-compatible server is also provided.  
-Multimodal models can attach their audio/image projector with `--mmproj <clip.gguf>`. Pass `--help` for more details.
+Multimodal models can attach their audio/image projector with `--with media=<clip.gguf>`. Pass `--help` for more details.
 
 ```bash
 mvn -pl jinfer/jinfer-cli -am package -DskipTests
@@ -264,7 +357,7 @@ java \
   -jar jinfer/jinfer-cli/target/jinfer.jar \
   --model LiquidAI/LFM2.5-2.6B-GGUF:Q8_0 \
   --context-capacity 65536 \
-  --server
+  server
 ```
 
 The server runs by default at `localhost:54154`, to verify it works:
@@ -317,7 +410,7 @@ Check termination before parsing partial output; typed SDK parsers may raise whe
 
 ```bash
 make -C jinfer native
-./bin/jinfer --model ./model.gguf --chat
+./bin/jinfer --model ./model.gguf chat
 ```
 
 One self-contained binary, instant startup. Requires GraalVM Native Image 25.0.3+.

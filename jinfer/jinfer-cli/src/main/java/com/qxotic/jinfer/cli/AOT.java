@@ -1,7 +1,9 @@
 package com.qxotic.jinfer.cli;
 
 import com.qxotic.format.gguf.GGUF;
+import com.qxotic.format.gguf.GGUFFormatException;
 import com.qxotic.jinfer.chat.LoadedModel;
+import com.qxotic.jinfer.chat.ModelProvider;
 import com.qxotic.jinfer.chat.Models;
 import com.qxotic.toknroll.Tokenizer;
 import com.qxotic.toknroll.gguf.GGUFTokenizerLoader;
@@ -123,26 +125,6 @@ final class AOT {
         return GGUFTokenizerLoader.createBuilderWithBuiltins().build().fromGGUF(gguf);
     }
 
-    /**
-     * The old stack's {@code -Djinfer.preTokenizer.*} escape hatch, detected so its presence is
-     * never silent: the hatch moved into toknroll as {@code -Dtoknroll.gguf.pre.<name>=...}
-     * (honored by every tokenizer build, this bake included - the flag applies at bake time, not at
-     * run time), so a leftover old flag is told its new name once.
-     */
-    private static void warnIfPropertyOverrides() {
-        for (String key : System.getProperties().stringPropertyNames()) {
-            if (key.startsWith("jinfer.preTokenizer.")) {
-                LOG.log(
-                        System.Logger.Level.WARNING,
-                        "-D{0} is set, but jinfer.preTokenizer.* moved into toknroll - rename it"
-                                + " to -Dtoknroll.gguf.pre.{1}=<same value>",
-                        key,
-                        key.substring("jinfer.preTokenizer.".length()));
-                return;
-            }
-        }
-    }
-
     /** Package-visible for its test: both digests of {@code [0, length)}, one read pass. */
     static HeaderDigests digestHeader(FileChannel fileChannel, long length) throws IOException {
         CRC32C crc = new CRC32C();
@@ -253,6 +235,8 @@ final class AOT {
         }
         try (FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.READ)) {
             return tokenizerFrom(readGguf(fileChannel));
+        } catch (IOException | GGUFFormatException | IllegalArgumentException e) {
+            throw Main.failure("cannot load tokenizer from '" + path + "'", e);
         }
     }
 
@@ -261,16 +245,22 @@ final class AOT {
      * (their ports parse them), and {@code tokenizerOverride} - the file named by {@code --with
      * tokenizer=} - outranks everything when present. Otherwise the baked tokenizer serves. That
      * precedence - explicit file, then bake, then the GGUF's own - is this caller's policy, not the
-     * library's. The weights arena is the process's: a CLI loads once and exits.
+     * library's. The caller owns the cross-thread weights arena and closes it after the engine.
      */
-    static LoadedModel<?> load(Path modelPath, Map<String, Path> companions, Path tokenizerOverride)
+    static LoadedModel<?> load(
+            Path modelPath, Map<String, Path> companions, Path tokenizerOverride, Arena arena)
             throws IOException {
-        warnIfPropertyOverrides();
         PreloadedFile main = match(PRELOADED, modelPath);
         Tokenizer tokenizer =
                 tokenizerOverride != null
                         ? tokenizerFrom(tokenizerOverride)
                         : main == null ? null : main.tokenizer();
-        return Models.load(modelPath, Arena.global(), companions, tokenizer);
+        try {
+            return Models.load(modelPath, arena, companions, tokenizer);
+        } catch (ModelProvider.IncompatibleModelException notLanguage) {
+            throw notLanguage; // the file is fine; the command asked for the wrong kind
+        } catch (IOException | IllegalArgumentException e) {
+            throw Main.failure("cannot load model '" + modelPath + "'", e);
+        }
     }
 }

@@ -23,7 +23,12 @@ import org.junit.jupiter.params.provider.MethodSource;
 class ProviderContractTest {
 
     private static final Set<String> KINDS =
-            Set.of("loadLanguage", "loadEmbedder", "loadReranker", "loadSpeech");
+            Set.of(
+                    "loadLanguage",
+                    "loadEmbedder",
+                    "loadReranker",
+                    "loadSpeech",
+                    "loadTranscription");
 
     static Stream<ModelProvider> providers() {
         return ServiceLoader.load(ModelProvider.class).stream().map(ServiceLoader.Provider::get);
@@ -84,8 +89,8 @@ class ProviderContractTest {
                 unimplemented.add(
                         () -> call(() -> provider.loadSpeech(null, gguf, none, null, Map.of())));
             for (Runnable load : unimplemented) {
-                UnsupportedOperationException refused =
-                        assertThrows(UnsupportedOperationException.class, load::run);
+                var refused =
+                        assertThrows(ModelProvider.IncompatibleModelException.class, load::run);
                 assertTrue(
                         refused.getMessage().matches("'" + arch + "' is not an? \\w+ architecture"),
                         provider.getClass().getName() + ": " + refused.getMessage());

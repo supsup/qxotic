@@ -13,7 +13,7 @@ required model provider and the optional runtime backends:
 ```java
 //JAVA 25
 //RUNTIME_OPTIONS --add-modules jdk.incubator.vector --enable-native-access=ALL-UNNAMED
-//DEPS com.qxotic:jinfer-bom:0.2.0@pom
+//DEPS com.qxotic:jinfer-bom:0.3.0@pom
 //DEPS com.qxotic:jinfer-langchain4j com.qxotic:jinfer-llama
 //DEPS com.qxotic:jam-native com.qxotic:jam-vector
 ```
@@ -71,6 +71,7 @@ The model returns normalized boxes. Java2D scales and paints them into `detected
 | Task | Command | Result |
 |---|---|---|
 | Speech synthesis | `jbang Speak.java "Hello from Java."` | Writes `hello.wav` |
+| Speech recognition | `jbang Transcribe.java speech.wav` | Prints the transcript, word timing on stderr |
 | Semantic search | `jbang Search.java "what causes coffee bitterness?"` | Ranks documents by embedding similarity |
 | Reranking | `jbang Rerank.java "what causes coffee bitterness?"` | Scores each query and document pair |
 | Prompt caching | `jbang CachedPrompt.java` | Reports restored prompt tokens |
