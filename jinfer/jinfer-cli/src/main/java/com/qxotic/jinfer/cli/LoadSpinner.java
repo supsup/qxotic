@@ -1,64 +1,65 @@
 package com.qxotic.jinfer.cli;
 
-import java.io.Console;
+import java.io.PrintStream;
 
-/**
- * A stderr heartbeat for the silent seconds of a cold model load (mmap + parse + weight packing):
- * {@code - Loading model ... 12s}, redrawn in place, erased on stop. Rendered ONLY when stderr is
- * an interactive console ({@link System#console} attached and a TTY) - piped and scripted runs see
- * no bytes, and embedders never reach this class (it is the CLI's, not the library's:
- * jinfer-kernels keeps its silent DEBUG {@code Timer}, and whoever owns the terminal owns the
- * rendering).
- */
-final class LoadSpinner {
-
-    private static final char[] FRAMES = {'|', '/', '-', '\\'};
+/** Append-only loading dots on stderr; redirected output gets one static line. */
+final class LoadSpinner implements AutoCloseable {
 
     private final Thread ticker;
+    private final PrintStream out;
+    private boolean closed;
 
-    private LoadSpinner(Thread ticker) {
+    private LoadSpinner(Thread ticker, PrintStream out) {
         this.ticker = ticker;
+        this.out = out;
     }
 
-    /** Starts the heartbeat; a no-op handle when stderr is not an interactive terminal. */
-    static LoadSpinner start(String label) {
-        Console console = System.console();
-        if (console == null || !console.isTerminal()) {
-            return new LoadSpinner(null);
+    static LoadSpinner start(String label, Main.IO io) {
+        return start(label, io.err(), io.isTerminal(2) && !"dumb".equals(System.getenv("TERM")));
+    }
+
+    static LoadSpinner start(String label, PrintStream out, boolean animate) {
+        if (!animate) {
+            out.println(label + " ...");
+            out.flush();
+            return new LoadSpinner(null, out);
         }
-        long startNanos = System.nanoTime();
+        out.print(label + " ...");
+        out.flush();
         Thread ticker =
                 new Thread(
                         () -> {
-                            for (int frame = 0; ; frame++) {
-                                long s = (System.nanoTime() - startNanos) / 1_000_000_000L;
-                                System.err.print(
-                                        "\r" + FRAMES[frame & 3] + " " + label + " ... " + s + "s");
+                            while (!Thread.currentThread().isInterrupted()) {
                                 try {
-                                    Thread.sleep(120);
+                                    Thread.sleep(500);
                                 } catch (InterruptedException done) {
                                     return;
+                                }
+                                synchronized (out) {
+                                    if (Thread.currentThread().isInterrupted()) return;
+                                    out.print('.');
+                                    out.flush();
                                 }
                             }
                         },
                         "jinfer-load-spinner");
         ticker.setDaemon(true);
         ticker.start();
-        return new LoadSpinner(ticker);
+        return new LoadSpinner(ticker, out);
     }
 
-    /** Stops the heartbeat and erases the line; idempotent, no-op off-terminal. */
-    void stop() {
-        if (ticker == null) {
+    /** Stops the dots and ends the line; idempotent, no-op off-terminal. */
+    @Override
+    public void close() {
+        if (ticker == null || closed) {
             return;
         }
+        closed = true;
         ticker.interrupt();
-        try {
-            ticker.join(500);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        // Finish after the last dot, even when the caller is interrupted.
+        synchronized (out) {
+            out.println();
+            out.flush();
         }
-        System.err.print("\r[2K"); // clear the spinner line
-        System.err.flush();
     }
 }

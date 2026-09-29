@@ -71,7 +71,16 @@
   </ciManagement>
 
   <properties>
-    <qxotic.version>${project.version}</qxotic.version>
+    <!-- Every project releases on the version its own root POM declares: one that did not change
+         is not republished. These lines are where everything outside a project resolves it, so a
+         bump is two edits, that POM and this one (plus jinfer-bom, which names the same versions
+         for consumers). Jinfer library versions are managed in jinfer/pom.xml. -->
+    <gguf.version>0.2.0</gguf.version>
+    <json.version>0.2.0</json.version>
+    <safetensors.version>0.2.0</safetensors.version>
+    <jota.version>0.2.0</jota.version>
+    <jam.version>0.2.0</jam.version>
+    <toknroll.version>0.2.0</toknroll.version>
     <!-- Publication is opt-in. Each supported or required transitive artifact overrides this.
          The release profile forwards it to central-publishing's skipPublishing, the plugin's own
          (and only) gate, so one switch decides what reaches Maven Central. -->
@@ -85,7 +94,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <!-- Reproducible builds: move this with every release. -->
-    <project.build.outputTimestamp>2026-09-04T00:00:00Z</project.build.outputTimestamp>
+    <project.build.outputTimestamp>2026-09-23T00:00:00Z</project.build.outputTimestamp>
     <maven.compiler.release>11</maven.compiler.release>
 
     <!-- Dependency versions -->
@@ -192,114 +201,114 @@
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>gguf</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${gguf.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>safetensors</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${safetensors.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>json</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${json.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jota-core</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jota.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jota-memory</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jota.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jota-tensor</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jota.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jota-backend-panama</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jota.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jota-backend-c</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jota.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jota-backend-hip</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jota.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jota-backend-cuda</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jota.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jota-backend-mojo</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jota.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jota-backend-metal</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jota.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jota-backend-opencl</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jota.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>toknroll-core</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${toknroll.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>toknroll-incubator</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${toknroll.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>toknroll-gguf</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${toknroll.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>toknroll-hf</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${toknroll.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jam-core</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jam.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jam-native</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jam.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jam-scalar</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jam.version}</version>
       </dependency>
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>jam-vector</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jam.version}</version>
       </dependency>
       <!-- Compile-only stub of GraalVM's @AlwaysInline. Always depend on it with <scope>provided</scope>
            so it is not bundled: on a native-image build the real annotation comes from the builder. -->
       <dependency>
         <groupId>com.qxotic</groupId>
         <artifactId>graalvm-annotations</artifactId>
-        <version>${qxotic.version}</version>
+        <version>${jam.version}</version>
         <scope>provided</scope>
       </dependency>
     </dependencies>

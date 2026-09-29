@@ -2,6 +2,7 @@ package com.qxotic.jinfer.chat;
 
 import com.qxotic.format.gguf.GGUF;
 import com.qxotic.jinfer.SpeechSynthesisModel;
+import com.qxotic.jinfer.TranscriptionModel;
 import com.qxotic.toknroll.Tokenizer;
 import java.io.IOException;
 import java.lang.foreign.Arena;
@@ -16,15 +17,15 @@ import java.util.Set;
  * classpath - no hand-maintained arch table in every consumer.
  *
  * <p>A port declares its {@link #architectures()} and overrides the {@code load*} method of each
- * kind it can produce - language, embedding, reranker, speech. The others keep their default, which
- * refuses with the architecture's name. All four take the same picture of the model: the {@code
- * channel} holding the bytes, the parsed {@code gguf} (whose tensor offsets are absolute in that
- * channel - an embedded GGUF arrives as {@link GGUF#at(long)}), the {@code path} of the file on
- * disk (the GGUF itself, or the archive holding it: the loaded model's name, and where a port looks
- * for a sibling file), and the {@code arena} the weights are mapped into (who provides the arena
- * owns the weights' lifetime; it must outlive every model sharing them). Nothing here is sized by
- * context: a state's size is chosen at {@code newState}, and the model's own context length comes
- * from the GGUF.
+ * kind it can produce - language, embedding, reranker, speech, transcription. The others keep their
+ * default, which refuses with the architecture's name. All five take the same picture of the model:
+ * the {@code channel} holding the bytes, the parsed {@code gguf} (whose tensor offsets are absolute
+ * in that channel - an embedded GGUF arrives as {@link GGUF#at(long)}), the {@code path} of the
+ * file on disk (the GGUF itself, or the archive holding it: the loaded model's name, and where a
+ * port looks for a sibling file), and the {@code arena} the weights are mapped into (who provides
+ * the arena owns the weights' lifetime; it must outlive every model sharing them). Nothing here is
+ * sized by context: a state's size is chosen at {@code newState}, and the model's own context
+ * length comes from the GGUF.
  *
  * <p><b>WARNING: confined arenas MUST NOT be supplied to any loading method. Misuse can corrupt
  * memory or crash the JVM; a confined arena is refused at load.</b> Even one worker may run on a
@@ -121,12 +122,44 @@ public interface ModelProvider {
         throw notA(gguf, "a speech");
     }
 
-    private static UnsupportedOperationException notA(GGUF gguf, String kind) {
-        return new UnsupportedOperationException(
+    /**
+     * Loads a TRANSCRIPTION (speech-to-text) model ({@link Models#loadTranscription}). {@code
+     * companions} arrive already validated against {@link #companionFiles()}.
+     */
+    default TranscriptionModel<?, ?, ?> loadTranscription(
+            FileChannel channel, GGUF gguf, Path path, Arena arena, Map<String, Path> companions)
+            throws IOException {
+        throw notA(gguf, "a transcription");
+    }
+
+    private static IncompatibleModelException notA(GGUF gguf, String kind) {
+        return new IncompatibleModelException(
                 "'"
                         + gguf.getString("general.architecture")
                         + "' is not "
                         + kind
                         + " architecture");
+    }
+
+    /**
+     * The model is known, but not as the kind that was asked for. A port claimed the file's
+     * architecture and could load it, only not through this {@code load*} method: {@link
+     * Models#loadSpeech} on a language model, {@link Models#load} on a transcription model. Every
+     * {@code load*} default a port leaves in place throws it, before any weights are touched.
+     *
+     * <p>It is distinct from the other refusals a load can raise, and callers rely on the
+     * difference: an architecture no port claims, a file that is not a GGUF, or one part of a split
+     * model are refused with other exceptions, because in each of those cases no loader would have
+     * worked. Here another one would. So a caller that offers several kinds (the CLI server, which
+     * serves language or transcription models) catches this to try the next loader, and a caller
+     * with one kind reports it as "wrong model for this command" rather than "broken model".
+     *
+     * <p>The message names the architecture and the kind refused, in the form {@code 'lfm2' is not
+     * a speech architecture}.
+     */
+    final class IncompatibleModelException extends IllegalArgumentException {
+        IncompatibleModelException(String message) {
+            super(message);
+        }
     }
 }
