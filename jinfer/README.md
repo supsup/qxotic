@@ -299,6 +299,8 @@ java \
   chat
 ```
 
+`--jfr run.jfr` records the run with Java Flight Recorder; `make jfr-metrics FILE=run.jfr` reads it back as one table. See [Profiling with JFR](../docs/jinfer/profiling.md).
+
 ## Text-to-speech CLI
 
 Use `speak` with a speech model and `--output` to write a 16-bit PCM WAV:

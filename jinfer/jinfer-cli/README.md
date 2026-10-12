@@ -54,6 +54,7 @@ jinfer instruct -m "$LM" "Explain virtual threads in two sentences."
 ```
 
 Options shared by several commands may precede or follow the command; an option of one command follows it.
+`--jfr <file>` is one of the shared ones: it records the run with Java Flight Recorder, model load and per-token decode included, and writes the file when the command returns ([Profiling with JFR](../../docs/jinfer/profiling.md)).
 Use `jinfer <command> --help` for the full option reference:
 
 ```sh

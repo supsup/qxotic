@@ -228,7 +228,7 @@ This table is the translation.
 - Vector API kernels run on x86 and ARM. JAM is selected automatically when present.
 - Prompt ingestion is batched. Generation uses one serial state per pipeline; fork another pipeline for parallel inference.
 - Threads: `-Djinfer.threads` (default: physical cores) sizes the one pool every kernel and jam backend runs on; there is no other thread knob.
-- JFR events cover load, queue/prefill/decode/TTFT, cache state, media projection, and MTP. The packaged `jinfer.jfc` enables aggregate events and leaves per-token decode off.
+- JFR events cover load, tokenization, prefill chunks, queue/prefill/decode/TTFT per request, per-token decode, cache state, media projection, and MTP. The packaged `jinfer.jfc` enables the aggregate events and leaves per-token decode off; `jinfer --jfr run.jfr` records a run with it on. [Profiling with JFR](/jinfer/profiling) covers recording, reading, and the events.
 - The server exports request outcomes, phase timings, token counters, and cache/media gauges at `/metrics`.
 
 For JVM runs, `hotspot_compile_commands` holds the current inlining hints for hot Vector API helpers.
