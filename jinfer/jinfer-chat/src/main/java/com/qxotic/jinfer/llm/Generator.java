@@ -4,6 +4,7 @@ import com.qxotic.jinfer.Batch;
 import com.qxotic.jinfer.ContextState;
 import com.qxotic.jinfer.LanguageModel;
 import com.qxotic.jinfer.telemetry.DecodeEvent;
+import com.qxotic.jinfer.telemetry.PrefillEvent;
 import java.lang.ref.Reference;
 import java.time.Duration;
 import java.util.Arrays;
@@ -183,7 +184,16 @@ public final class Generator {
                 timedOut = true; // no new chunk past the deadline; the prompt is partial
                 break;
             }
+            // one event per chunk, no isEnabled gate: a chunk is hundreds of tokens of matmul,
+            // so one small allocation cannot perturb it the way a per-token one would below
+            PrefillEvent prefill = new PrefillEvent();
+            prefill.begin();
             model.ingest(state, batch);
+            prefill.end();
+            if (prefill.shouldCommit()) {
+                prefill.tokens = batch.count();
+                prefill.commit();
+            }
         }
         long prefillDoneNanos = System.nanoTime();
 

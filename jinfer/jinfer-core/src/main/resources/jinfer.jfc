@@ -15,6 +15,16 @@
     <setting name="threshold">0 ms</setting>
   </event>
 
+  <event name="jinfer.Tokenize">
+    <setting name="enabled">true</setting>
+    <setting name="threshold">0 ms</setting>
+  </event>
+
+  <event name="jinfer.Prefill">
+    <setting name="enabled">true</setting>
+    <setting name="threshold">0 ms</setting>
+  </event>
+
   <event name="jinfer.ModelLoad">
     <setting name="enabled">true</setting>
   </event>

@@ -12,6 +12,7 @@ import com.qxotic.jinfer.codecs.ImageCodec;
 import com.qxotic.jinfer.kernels.ModelLoader;
 import com.qxotic.jinfer.media.Media;
 import com.qxotic.jinfer.media.Multimodal;
+import com.qxotic.jinfer.telemetry.ModelLoadEvent;
 import com.qxotic.toknroll.Tokenizer;
 import java.io.BufferedInputStream;
 import java.io.EOFException;
@@ -154,17 +155,38 @@ public final class Models {
             Path path, Arena arena, Map<String, Path> companions, Tokenizer tokenizer)
             throws IOException {
         Map<String, Path> attached = Map.copyOf(companions);
-        return open(
-                path,
-                attached,
-                tokenizer,
-                (provider, fc, gguf) ->
-                        companionSeeded(
-                                sampled(
-                                        provider.loadLanguage(
-                                                fc, gguf, path, arena, attached, tokenizer),
-                                        gguf),
-                                attached));
+        // the one load seam every language-model face shares, so the event is emitted here: its
+        // duration is the whole open (header parse, tokenizer build, port load), the cost a user
+        // waits for before the first token
+        ModelLoadEvent event = new ModelLoadEvent();
+        event.begin();
+        LoadedModel<?> loaded =
+                open(
+                        path,
+                        attached,
+                        tokenizer,
+                        (provider, fc, gguf) -> {
+                            event.architecture =
+                                    gguf.getStringOrDefault("general.architecture", "");
+                            // tensor data only: the header is parsed, not kept (a header-only
+                            // fixture may end before its aligned data offset, hence the floor)
+                            event.weightsBytes =
+                                    Math.max(0L, fc.size() - gguf.getTensorDataOffset());
+                            return companionSeeded(
+                                    sampled(
+                                            provider.loadLanguage(
+                                                    fc, gguf, path, arena, attached, tokenizer),
+                                            gguf),
+                                    attached);
+                        });
+        event.end();
+        if (event.shouldCommit()) {
+            event.model = path.getFileName().toString();
+            event.maxContextLength = loaded.model().configuration().maxContextLength();
+            event.mapped = true; // ModelLoader maps the tensor region read-only; nothing is read in
+            event.commit();
+        }
+        return loaded;
     }
 
     /**

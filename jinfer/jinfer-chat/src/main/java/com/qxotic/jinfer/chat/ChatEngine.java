@@ -17,6 +17,7 @@ import com.qxotic.jinfer.telemetry.CacheSample;
 import com.qxotic.jinfer.telemetry.InferenceEvent;
 import com.qxotic.jinfer.telemetry.MediaCacheSample;
 import com.qxotic.jinfer.telemetry.Telemetry;
+import com.qxotic.jinfer.telemetry.TokenizeEvent;
 import com.qxotic.jota.DataType;
 import com.qxotic.jota.memory.MemoryAllocators;
 import com.qxotic.jota.memory.MemoryArena;
@@ -1043,7 +1044,31 @@ public final class ChatEngine implements AutoCloseable {
         }
     }
 
+    /** {@link #encode0} under a {@link TokenizeEvent}: one per prompt, native or Jinja path. */
     private Encoded encode(
+            Conversation conversation,
+            Map<String, Object> templateKwargs,
+            MemoryArena<MemorySegment> mediaRows) {
+        TokenizeEvent event = new TokenizeEvent();
+        event.begin();
+        Encoded encoded = encode0(conversation, templateKwargs, mediaRows);
+        event.end();
+        if (event.shouldCommit()) {
+            event.chars = characters(conversation);
+            event.tokens = Batch.positions(encoded.prompt());
+            event.commit();
+        }
+        return encoded;
+    }
+
+    /** Text characters a conversation carries; media parts count nothing. */
+    private static int characters(Conversation conversation) {
+        long total = 0;
+        for (Message message : conversation.messages()) total += message.text().length();
+        return (int) Math.min(total, Integer.MAX_VALUE);
+    }
+
+    private Encoded encode0(
             Conversation conversation,
             Map<String, Object> templateKwargs,
             MemoryArena<MemorySegment> mediaRows) {
