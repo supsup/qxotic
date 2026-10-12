@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import jdk.jfr.Enabled;
 import jdk.jfr.Event;
 import jdk.jfr.EventType;
 import jdk.jfr.ValueDescriptor;
@@ -26,6 +27,8 @@ class EventSchemaTest {
         for (String name :
                 List.of(
                         "jinfer.Inference",
+                        "jinfer.Tokenize",
+                        "jinfer.Prefill",
                         "jinfer.ModelLoad",
                         "jinfer.Runtime",
                         "jinfer.PromptCache",
@@ -92,6 +95,25 @@ class EventSchemaTest {
     }
 
     @Test
+    void promptEventsAreStable() {
+        assertEvent(
+                TokenizeEvent.class,
+                "jinfer.Tokenize",
+                List.of("jinfer", "Inference"),
+                Set.of("chars", "tokens"));
+        assertEvent(
+                PrefillEvent.class,
+                "jinfer.Prefill",
+                List.of("jinfer", "Inference"),
+                Set.of("tokens"));
+        // on by default, unlike Decode: per prompt and per chunk, not per token
+        for (Class<? extends Event> event : List.of(TokenizeEvent.class, PrefillEvent.class)) {
+            Enabled enabled = EventType.getEventType(event).getAnnotation(Enabled.class);
+            assertTrue(enabled == null || enabled.value(), event.getSimpleName() + " defaults on");
+        }
+    }
+
+    @Test
     void cacheEventsAreStable() {
         assertEvent(
                 PromptCacheEvent.class,
@@ -145,6 +167,8 @@ class EventSchemaTest {
                         RuntimeEvent.class,
                         SpeculationEvent.class,
                         DecodeEvent.class,
+                        PrefillEvent.class,
+                        TokenizeEvent.class,
                         PromptCacheEvent.class,
                         MediaCacheEvent.class,
                         MediaProjectionEvent.class)) {
