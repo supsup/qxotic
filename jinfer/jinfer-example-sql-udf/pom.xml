@@ -61,11 +61,13 @@
       <artifactId>jam-vector</artifactId>
       <scope>runtime</scope>
     </dependency>
-    <!-- the Java-hosted database: in-memory, calls the UDFs in-process -->
+    <!-- the Java-hosted database: in-memory, calls the UDFs in-process. Runtime scope: nothing
+         here imports org.h2, the demo and the tests reach it through JDBC alone. -->
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
       <version>${h2.version}</version>
+      <scope>runtime</scope>
     </dependency>
     <!-- shared model fixtures (paths relative to the checkout; scripts/download-models.sh) -->
     <dependency>
@@ -86,7 +88,7 @@
           <executable>java</executable>
           <arguments>
             <argument>--add-modules</argument>
-            <argument>jdk.incubator.vector,jdk.httpserver</argument>
+            <argument>jdk.incubator.vector</argument>
             <argument>--enable-native-access=ALL-UNNAMED</argument>
             <argument>-Djinfer.sqludf.model=${jinfer.sqludf.model}</argument>
             <argument>-Djinfer.sqludf.embedModel=${jinfer.sqludf.embedModel}</argument>
