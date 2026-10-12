@@ -34,7 +34,7 @@ java -XX:StartFlightRecording=settings=profile,settings=jinfer/jinfer-core/src/m
 ```
 
 Add `jinfer.Decode#enabled=true` to switch per-token events on there, or copy `jinfer.jfc` into `$JAVA_HOME/lib/jfr/` so `settings=jinfer` resolves by name.
-`jinfer-bench` runs the same way.
+`jinfer-bench` runs the same way: its prompt-processing tests (`pp512`, and the prefix replay of a depth test) emit one `jinfer.Prefill` per chunk, warm-up passes included; its token-generation loop calls the model directly and emits no `jinfer.Decode`, so the decode row of a bench recording comes from its `ChatEngine` metrics or reads `n/a`.
 Start the recording after warm-up (`delay=`) or filter by time, or interpreter and C1 time is attributed to the kernels.
 
 ## Read

@@ -5,6 +5,7 @@ import com.qxotic.jinfer.Batch;
 import com.qxotic.jinfer.CheckpointCodec;
 import com.qxotic.jinfer.ContentKey;
 import com.qxotic.jinfer.ContextState;
+import com.qxotic.jinfer.LanguageModel;
 import com.qxotic.jinfer.RuntimeFlags;
 import com.qxotic.jinfer.Segments;
 import com.qxotic.jinfer.Views;
@@ -20,6 +21,7 @@ import com.qxotic.jinfer.llm.Sampler;
 import com.qxotic.jinfer.llm.Sampling;
 import com.qxotic.jinfer.media.Media;
 import com.qxotic.jinfer.media.Multimodal;
+import com.qxotic.jinfer.telemetry.PrefillEvent;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.foreign.Arena;
@@ -248,9 +250,7 @@ public final class JinferBench {
         }
 
         void ingestPrefill(int[] prompt) {
-            for (Batch b : Batch.prepare(List.of(Batch.prefill(prompt)), state.batchCapacity())) {
-                loaded.model().ingest(state, b);
-            }
+            JinferBench.ingestPrefill(loaded.model(), state, prompt);
         }
 
         void ingestStep(int tok) {
@@ -260,6 +260,32 @@ public final class JinferBench {
         float logits0() {
             return Views.getFloat(
                     Views.castToSegmentBacked(loaded.model().logits(state), "logits"), 0, "logits");
+        }
+    }
+
+    /**
+     * The bench's prompt processing: the prompt in chunks of the state's batch capacity, each under
+     * one {@code jinfer.Prefill} - the event {@code Generator} and {@code CachedSession} emit, so a
+     * recorded bench run has the same prefill rows as a recorded CLI run. The bench ingests at the
+     * raw model boundary, below both, hence its own emission. One small allocation per chunk of
+     * hundreds of tokens, as in {@code Generator}; package-visible for its test.
+     */
+    static <S extends ContextState> void ingestPrefill(
+            LanguageModel<?, ?, S> model, S state, int[] prompt) {
+        for (Batch b : Batch.prepare(List.of(Batch.prefill(prompt)), state.batchCapacity())) {
+            ingestChunk(model, state, b);
+        }
+    }
+
+    private static <S extends ContextState> void ingestChunk(
+            LanguageModel<?, ?, S> model, S state, Batch chunk) {
+        PrefillEvent prefill = new PrefillEvent();
+        prefill.begin();
+        model.ingest(state, chunk);
+        prefill.end();
+        if (prefill.shouldCommit()) {
+            prefill.tokens = chunk.count();
+            prefill.commit();
         }
     }
 

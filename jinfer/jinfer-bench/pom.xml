@@ -73,6 +73,12 @@
       <artifactId>jam-scalar</artifactId>
       <scope>runtime</scope>
     </dependency>
+    <!-- A weightless model, so the bench's own ingest path is tested without weights. -->
+    <dependency>
+      <groupId>com.qxotic</groupId>
+      <artifactId>jinfer-testkit</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <!-- The shade + native-image configuration lives in jinfer-parent's pluginManagement; this
        module only names the executable it produces (the jinfer.image.* properties above). -->
