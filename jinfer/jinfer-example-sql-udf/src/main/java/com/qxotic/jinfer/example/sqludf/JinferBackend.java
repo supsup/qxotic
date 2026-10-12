@@ -10,6 +10,7 @@ import com.qxotic.jinfer.chat.Message;
 import com.qxotic.jinfer.chat.Models;
 import com.qxotic.jinfer.llm.Grammar;
 import com.qxotic.jinfer.llm.Sampling;
+import com.qxotic.jota.memory.MemoryAllocators;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.foreign.Arena;
@@ -199,7 +200,7 @@ final class JinferBackend implements LlmBackend {
                 int capacity =
                         Math.min(
                                 contextCapacity, loaded.model().configuration().maxContextLength());
-                embeddingState = loaded.model().newState(capacity);
+                embeddingState = newState(loaded, capacity, arena);
                 embedder = loaded;
                 embeddingArena = arena;
             } catch (IOException e) {
@@ -214,9 +215,23 @@ final class JinferBackend implements LlmBackend {
     }
 
     /**
+     * The state borrows the arena the weights live in (the idiom of the Spring AI adapter's
+     * embedding model), so {@link #close} frees both deterministically: state first, then arena.
+     */
+    private static <S extends ContextState> S newState(
+            LoadedEmbedder<S> loaded, int capacity, Arena arena) {
+        return loaded.model().newState(capacity, MemoryAllocators.ofArena(arena));
+    }
+
+    /**
      * Pins the instruction turn into the block layer once per distinct instruction. Skipped when
      * the model has no native chat-template codec (then the engine has no block layer and every row
      * would prefill the whole prompt - correct, just slower).
+     *
+     * <p>{@code definePrompt(Conversation)} rather than the {@code definePrompt(Request)} the engine
+     * recommends: the Request form exists because the thinking floor can render a different prompt
+     * than the flag alone, and here thinking is pinned false on this define and on every request
+     * that follows, so both forms encode the same prefix.
      */
     private void definePrefix(ChatEngine chat, String instruction, Message system) {
         if (!chat.blockCaching() || !definedPrefixes.add(instruction)) return;

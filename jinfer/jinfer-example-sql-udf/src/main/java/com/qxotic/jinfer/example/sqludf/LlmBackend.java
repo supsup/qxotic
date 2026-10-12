@@ -19,7 +19,10 @@ public interface LlmBackend extends AutoCloseable {
      */
     String choose(String instruction, String text, List<String> labels);
 
-    /** The embedding vector of {@code text}, L2-normalized by the model's own convention. */
+    /**
+     * The embedding vector of {@code text}, as the embedding model emits it: the LFM2.5 embedder
+     * L2-normalizes, another family may not, and {@code COSINE} normalizes anyway.
+     */
     float[] embed(String text);
 
     /** Counters since the last {@link #resetStats}; a backend without timings reports zeros. */
