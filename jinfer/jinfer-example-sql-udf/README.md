@@ -37,6 +37,7 @@ The timing line prints how many prompt tokens the cache restored.
 Each row is still its own decode pass.
 Jinfer's engine serializes generations on one lock and exposes no public multi-sequence (tree-attention) decode, so N rows cost N short passes over a shared prefix rather than one batched pass.
 That is the honest shape of "many questions from one prefix" today; the cache removes the prefill, not the per-row decode.
+`LLM_EMBED` has the same shape: H2 calls it once per row, so each call is a one-text `embedAll` and the embedder's greedy packer (many texts per forward pass, the local-rag example's path) goes unused.
 
 ## Run
 
@@ -118,7 +119,8 @@ Expected output shape (labels and neighbours depend on the model):
 >>> judge: 50 rows in N.Ns (N.N rows/s); 50 calls, prompt N tokens (N restored from cache), pp N tok/s, tg N tok/s
 ```
 
-Tickets 4, 7, 20, 30, 40 and 50 are the refund rows by construction; the judge query is "right" when it returns those and nothing else.
+Tickets 4, 7, 20, 30, 40 and 50 are the rows the author wrote as refund requests; compare the judge's rows against that intent.
+The model-free test pins the fake backend to `[4, 20, 40, 50]` because the fake matches the word "refund", which tickets 7 and 30 do not contain.
 
 ## Timings
 
@@ -130,13 +132,12 @@ Tickets 4, 7, 20, 30, 40 and 50 are the refund rows by construction; the judge q
 | embed    | 50   | TBD   | TBD    | n/a                      | n/a      | n/a      |
 | judge    | 50   | TBD   | TBD    | TBD                      | TBD      | TBD      |
 
-Caveat: the numbers above were taken on a Mac whose JIT reports `vectorJit=slow` (see `jinfer-bench/README.md`), so the Vector API kernels run their scalar fallback and both pp and tg are well below what the engine does on a fast-JIT host.
-Treat them as a shape, not a benchmark.
+The table is filled in from a real run of `make -C jinfer example-sql-udf`, with the machine and the JVM named next to it.
 
 ## Bias caveat: decision models have favourite answers
 
-A small model asked to pick from a list does not pick uniformly.
-Asked to roll a fair die, it rolls a loaded one; asked to classify, it leans on the first label, the shortest label, or the one that appeared most in its training data.
+A small model asked to pick from a list is commonly reported not to pick uniformly: asked to roll a fair die it tends to roll a loaded one, and asked to classify it may lean on the first label, the shortest, or the one its training data favoured.
+This is a claim to test, not a fact to assume, and the test is cheap here: run the `GROUP BY` query twice with the labels in two orders and compare the two distributions.
 Constrained decoding makes the answer well-formed, not well-founded: the grammar guarantees the reply is in the set, and nothing more.
 
 Two mitigations, one implemented here:
