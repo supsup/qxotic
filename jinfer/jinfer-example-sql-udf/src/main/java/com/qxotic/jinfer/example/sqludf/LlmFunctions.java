@@ -89,10 +89,12 @@ public final class LlmFunctions {
     }
 
     /**
-     * {@code COSINE(a REAL ARRAY, b REAL ARRAY) -> DOUBLE}: cosine similarity, -1..1. Elements
-     * arrive as whatever H2 boxed them to (Float for REAL, Double for a literal), hence Number.
+     * {@code COSINE(a REAL ARRAY, b REAL ARRAY) -> DOUBLE}: cosine similarity, -1..1. The
+     * parameters are {@code Float[]}, not {@code Object[]}: H2 reads the latter as an array of
+     * JAVA_OBJECT and refuses to convert REAL elements into it, while a {@code Float[]} declares
+     * REAL ARRAY and H2 casts a NUMERIC literal element to it on the way in.
      */
-    public static Double cosine(Object[] a, Object[] b) {
+    public static Double cosine(Float[] a, Float[] b) {
         if (a == null || b == null) return null;
         if (a.length != b.length) {
             throw new IllegalArgumentException(
@@ -100,7 +102,7 @@ public final class LlmFunctions {
         }
         double dot = 0, normA = 0, normB = 0;
         for (int i = 0; i < a.length; i++) {
-            double x = ((Number) a[i]).doubleValue(), y = ((Number) b[i]).doubleValue();
+            double x = a[i], y = b[i];
             dot += x * y;
             normA += x * x;
             normB += y * y;
