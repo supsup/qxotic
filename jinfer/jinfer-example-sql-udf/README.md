@@ -96,6 +96,7 @@ Expected output shape (labels and neighbours depend on the model):
 
 ```text
 >>> loaded 50 tickets into H2 (in-memory), aliases registered
+>>> models loaded in N.Ns (chat + embedding, outside every query clock)
 
 >>> SELECT ... LLM_CLASSIFY(body, 'bug,feature,question') ... GROUP BY label
 >>> classify: 50 rows in N.Ns (N.N rows/s); 50 calls, prompt N tokens (N restored from cache), pp N tok/s, tg N tok/s

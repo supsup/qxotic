@@ -73,6 +73,17 @@ final class JinferBackend implements LlmBackend {
     }
 
     @Override
+    public void load() {
+        lock.lock();
+        try {
+            chat();
+            embedder();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
     public String complete(String prompt, int maxTokens) {
         Objects.requireNonNull(prompt, "prompt");
         if (maxTokens <= 0) throw new IllegalArgumentException("maxTokens " + maxTokens);

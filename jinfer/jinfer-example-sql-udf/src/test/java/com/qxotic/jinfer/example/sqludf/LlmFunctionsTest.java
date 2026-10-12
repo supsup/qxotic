@@ -166,6 +166,7 @@ class LlmFunctionsTest {
         assertFalse(report.nearest().contains(Main.PROBE_ID));
         // the fake says yes exactly when the body mentions a refund
         assertEquals(List.of(4, 20, 40, 50), report.refunds());
+        assertTrue(printed.contains(">>> models loaded in"), printed);
         assertTrue(printed.contains(">>> classify: 50 rows"), printed);
         assertTrue(printed.contains(">>> embed: 50 rows"), printed);
         assertTrue(printed.contains(">>> judge: 50 rows"), printed);

@@ -20,6 +20,9 @@ final class FakeBackend implements LlmBackend {
     boolean closed;
 
     @Override
+    public void load() {}
+
+    @Override
     public String complete(String prompt, int maxTokens) {
         completed.add(prompt);
         lastMaxTokens = maxTokens;

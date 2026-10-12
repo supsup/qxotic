@@ -63,6 +63,15 @@ public final class Main {
             int rows = loadTickets(db);
             out.printf(">>> loaded %d tickets into H2 (in-memory), aliases registered%n", rows);
 
+            // the models map on first use; pay that here, on its own line, so every rows/s below
+            // is model work only (the first classify row still pays the one-time prefix define,
+            // which is why a query's restored-token count covers N-1 rows, not N)
+            long loadStarted = System.nanoTime();
+            Llm.backend().load();
+            out.printf(
+                    ">>> models loaded in %.1fs (chat + embedding, outside every query clock)%n",
+                    (System.nanoTime() - loadStarted) / 1e9);
+
             // 1. classify + GROUP BY: one grammar-pinned label per row, counted by SQL
             out.printf("%n>>> SELECT ... LLM_CLASSIFY(body, '%s') ... GROUP BY label%n", LABELS);
             Map<String, Integer> counts = new LinkedHashMap<>();

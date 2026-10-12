@@ -9,6 +9,12 @@ import java.util.List;
  */
 public interface LlmBackend extends AutoCloseable {
 
+    /**
+     * Maps every model now instead of on the first call that needs it, so a caller timing a query
+     * can keep the load out of the clock. Idempotent; a fake has nothing to do.
+     */
+    void load();
+
     /** Free-form completion of {@code prompt}, at most {@code maxTokens} long. */
     String complete(String prompt, int maxTokens);
 
