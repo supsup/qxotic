@@ -23,8 +23,8 @@ public final class Norms {
      * End of the four-accumulator blocks: the largest multiple of {@code unroll} not above {@code
      * size}, and never positive for a {@code size} below one block. The loops compare {@code i}
      * against this instead of testing {@code i + unroll <= size}, because that sum wraps negative
-     * within {@code unroll} of {@link Integer#MAX_VALUE} and admits a block past the end; {@code
-     * i} stops exactly on this bound, so stepping to it cannot wrap either.
+     * within {@code unroll} of {@link Integer#MAX_VALUE} and admits a block past the end; {@code i}
+     * stops exactly on this bound, so stepping to it cannot wrap either.
      */
     static int unrolledBound(int size, int unroll) {
         return size - size % unroll;
