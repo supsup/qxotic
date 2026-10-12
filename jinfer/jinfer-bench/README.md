@@ -123,14 +123,17 @@ bin/jinfer-bench -m LFM2.5-350M-Q8_0.gguf -p 512 -n 128 -r 5 -w 2 --threads-swee
 make -C jinfer bench-sweep GGUF=LFM2.5-350M-Q8_0.gguf THREADS=1,2,4,all    # JVM, builds the bench jar first
 ```
 
+The header is from a real run (an M5 Max with 6 P-cores, on C2 with no native backend, so it carried the `SLOW_JIT` cliff); the cells are placeholders at the emitted widths.
+The header names the engine default so a reader can tell which listed count was `all`.
+
 ```text
-jinfer-bench 0.3.1 | runtime: native image | jam: native, vector, scalar | threads: 1,2,4,8 (sweep)
+jinfer-bench 0.3.1 | runtime: C2 (Vector API kernels de-intrinsified) | jam: vector, scalar | threads: 1,2,4,8 (sweep; all = engine default 6)
 | model            | threads |           pp t/s |           tg t/s | tg speedup | pp speedup |
 | ---------------- | ------: | ---------------: | ---------------: | ---------: | ---------: |
-| LFM2.5-350M-Q8_0 |       1 |   <pp1> ± <sd>   |   <tg1> ± <sd>   |      1.00x |      1.00x |
-| LFM2.5-350M-Q8_0 |       2 |   <pp2> ± <sd>   |   <tg2> ± <sd>   |  <tg2/tg1> |  <pp2/pp1> |
-| LFM2.5-350M-Q8_0 |       4 |   <pp4> ± <sd>   |   <tg4> ± <sd>   |  <tg4/tg1> |  <pp4/pp1> |
-| LFM2.5-350M-Q8_0 |       8 |   <pp8> ± <sd>   |   <tg8> ± <sd>   |  <tg8/tg1> |  <pp8/pp1> |
+| LFM2.5-350M-Q8_0 |       1 |     <pp1> ± <sd> |     <tg1> ± <sd> |      1.00x |      1.00x |
+| LFM2.5-350M-Q8_0 |       2 |     <pp2> ± <sd> |     <tg2> ± <sd> |  <tg2/tg1> |  <pp2/pp1> |
+| LFM2.5-350M-Q8_0 |       4 |     <pp4> ± <sd> |     <tg4> ± <sd> |  <tg4/tg1> |  <pp4/pp1> |
+| LFM2.5-350M-Q8_0 |       8 |     <pp8> ± <sd> |     <tg8> ± <sd> |  <tg8/tg1> |  <pp8/pp1> |
 plateau: tg within 5% of max from <N> threads
 ```
 

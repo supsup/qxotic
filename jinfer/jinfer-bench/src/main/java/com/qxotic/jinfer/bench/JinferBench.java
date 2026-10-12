@@ -219,7 +219,13 @@ public final class JinferBench {
             if (i == sweepAt || i == sweepAt + 1) continue;
             childArgs.add(args[i]);
         }
-        System.out.println(header(ThreadSweep.label(counts) + " (sweep)"));
+        // the default is named so a reader can tell which listed count was `all` (if any)
+        System.out.println(
+                header(
+                        ThreadSweep.label(counts)
+                                + " (sweep; all = engine default "
+                                + RuntimeFlags.THREADS
+                                + ")"));
         Map<String, List<ThreadSweep.Point>> byModel = ThreadSweep.run(childArgs, counts);
         boolean first = true;
         for (Map.Entry<String, List<ThreadSweep.Point>> e : byModel.entrySet()) {
@@ -231,11 +237,11 @@ public final class JinferBench {
 
     /**
      * The thread budget the rows report. {@code -t} ({@code requested > 0}) sets the engine's one
-     * budget, which must happen BEFORE {@code RuntimeFlags} initializes; without it the run measures
-     * the engine's own default, one thread per physical core. Either way the value returned is what
-     * the engine runs with, read back from {@code RuntimeFlags}, never the request echoed: a sweep
-     * child's threads column is checked against the count it was asked for, and that check only
-     * proves something if the column is the engine's truth.
+     * budget, which must happen BEFORE {@code RuntimeFlags} initializes; without it the run
+     * measures the engine's own default, one thread per physical core. Either way the value
+     * returned is what the engine runs with, read back from {@code RuntimeFlags}, never the request
+     * echoed: a sweep child's threads column is checked against the count it was asked for, and
+     * that check only proves something if the column is the engine's truth.
      */
     static int engineThreads(int requested) {
         if (requested > 0) System.setProperty("jinfer.threads", Integer.toString(requested));
