@@ -103,7 +103,8 @@ public class JinferChatAutoConfiguration {
             throw new IllegalStateException(
                     "spring.ai.jinfer.chat.prompt-cache and prompt-cache-persist are both set:"
                             + " prompt-cache is a read-only mount, prompt-cache-persist a catalog"
-                            + " the application rewrites at shutdown - configure one");
+                            + " the application compiles once at startup when the file is"
+                            + " absent - configure one");
         }
         if (mount) {
             builder.promptCache(Path.of(properties.promptCache()));
