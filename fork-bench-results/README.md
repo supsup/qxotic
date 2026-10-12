@@ -9,8 +9,9 @@ A number without those four is not a result.
 ## Machine
 
 Apple M5 Max, 6 performance cores, 18 logical, 128 GB, macOS 27.
-On this machine the JIT de-intrinsifies the Vector API kernels (the bench header says so and the engine logs a SLOW_JIT performance cliff).
-The upstream author says Mac numbers are not representative yet; treat everything here as the slow path unless a file says otherwise.
+Runs here are under Amazon Corretto 25 (C2) with 128-bit NEON vectors and without the native matmul backend (cmake absent, `-Djam.native.skip=true`) unless a file says otherwise.
+The engine labels this configuration `C2 (Vector API kernels de-intrinsified)` in the bench header and logs a SLOW_JIT cliff; both are set by which JIT is loaded (compiler identity), not by measurement.
+No Corretto-versus-GraalVM comparison has been run on this machine yet, and the upstream author's own benchmark page for his speech model says C2 is not the cliff it is documented to be; read the label as a configuration note, not as a measured slowness.
 jam-native was not built (no cmake), so the jam backends are vector and scalar only.
 
 ## JVMs available

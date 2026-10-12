@@ -6,11 +6,12 @@ Results go in `fork-bench-results/<date>/`, one file per cell, written by the tw
 
 ## The two questions
 
-1. Does the `SLOW_JIT` performance cliff go away under the newer GraalVM, or on Linux?
-   The bench header prints `runtime: C2 (Vector API kernels de-intrinsified)` on the runs made so far.
-2. Once it is gone, does decode (`tg`) plateau at 2 to 4 threads?
+1. Is there a `SLOW_JIT` cliff on this machine at all, and does anything change under the newer GraalVM, or on Linux?
+   The bench header prints `runtime: C2 (Vector API kernels de-intrinsified)` on the runs made so far, a label set by which JIT is loaded, not a measured ratio.
+   No Corretto-versus-GraalVM comparison has been run on this machine yet, and the upstream author's own benchmark page for his speech model says C2 is not the cliff it is documented to be.
+2. Does decode (`tg`) plateau at 2 to 4 threads in the cells with the most per-core throughput?
    The upstream bench README says "Decode is memory-bound at high thread counts".
-   The one existing sweep (C2, vector) shows no plateau up to 8 threads: `tg` scaled 5.37x.
+   The one existing sweep (Corretto 25 C2, 128-bit NEON, vector backend, no native matmul) shows no plateau up to 8 threads: `tg` scaled 5.37x.
 
 ## Read this before trusting the header line
 
@@ -144,10 +145,10 @@ Run it on mains power with the machine idle; do not run two cells at once.
 | H1 vs H2 | macOS, vector, jar | whether GraalVM CE 25.4.4.1 lifts `pp` and `tg` over C2 on Apple Silicon, i.e. whether the cliff is real here and whether this JVM avoids it |
 | H2 vs H3 | macOS, vector, jar, Graal JIT | whether the newer GraalVM matters, or any GraalVM CE 25 does |
 | H1 vs L1 | C2 (different vendor builds), vector | whether the OS matters under C2. The header should say C2 on both |
-| H2 vs L3 | Graal JIT (versions may differ), vector | whether the OS matters once the JIT compiles the kernels |
-| L1 vs L2, L3 vs L4 | OS, JVM, container | Java Vector API kernels against the C kernels. Under C2 the gap is the cost of the cliff for prefill; under Graal it is the honest Java-against-C gap |
+| H2 vs L3 | Graal JIT (versions may differ), vector | whether the OS matters under the Graal JIT |
+| L1 vs L2, L3 vs L4 | OS, JVM, container | Java Vector API kernels against the C kernels, per JIT. If H1 vs H2 shows a real cliff under C2, the C2 gap includes its cost for prefill; otherwise both are the honest Java-against-C gap |
 | L2 vs L4 | OS, native backend | how much of the engine outside the matmuls still depends on the JIT |
-| `tg` across threads in H2, L3, L4 | everything but threads | the plateau question. These are the cells without a de-intrinsified JIT (L2 has native matmuls but a C2 engine around them) |
+| `tg` across threads in H2, L3, L4 | everything but threads | the plateau question. These are the cells not carrying the `C2 (...)` label (L2 has native matmuls but a C2 engine around them); whether that label marks a real difference is what H1 vs H2 tests |
 
 Every cross-OS comparison also crosses a VM boundary and a JDK build.
 A difference there is a lead to chase, not a conclusion.
@@ -156,13 +157,13 @@ A difference there is a lead to chase, not a conclusion.
 
 - Prefill (`pp`) is compute-bound and batched: it should scale with threads, close to linearly up to the 6 performance cores. Past 6 the extra threads land on efficiency cores, so expect less than proportional gains from 6 to 8.
 - Decode (`tg`) is one token at a time over the whole weight set. If it is memory-bound, `tg` stops rising at a low thread count while `pp` keeps rising. That divergence is the signature the README describes.
-- A de-intrinsified JIT makes both compute-bound: each thread spends its time in slow per-lane code, memory bandwidth is never the limit, and `tg` scales like `pp`. The existing C2 sweep shows exactly this (`tg` 5.37x and `pp` 5.39x at 8 threads). So a `tg` curve that tracks `pp` is evidence of the cliff, not evidence against the README.
+- Low enough per-core throughput makes both compute-bound: memory bandwidth is never the limit, and `tg` scales like `pp`. The existing C2 sweep shows this shape (`tg` 5.37x and `pp` 5.39x at 8 threads). A plausible reading is that per-core throughput on 128-bit vectors without the native backend is low enough that eight cores do not saturate this machine's memory bandwidth; this is an inference, and the Corretto-versus-GraalVM and native-backend cells here are the test. So a `tg` curve that tracks `pp` is consistent with low per-core throughput, whatever its cause, and is not by itself evidence against the README.
 - The `plateau:` line names the smallest count whose `tg` is within 5% of the best. `(largest count: lower bound only)` means the sweep found no plateau.
 - Read the standard deviation before reading a difference. Two cells whose intervals overlap have not been told apart.
 - Check `# jam backends` and `# cliff` in every file before comparing it with another. A `# MISMATCH` or `# FAILED` line means the file is not the cell its name says.
 
 ## Not covered
 
-- The NormPeak microbench (`com.qxotic.jinfer.bench.NormPeak` on branch fixpoint/issue-6-7-kernels, run with `-cp bin/jinfer-bench.jar`) is a kernel loop without a model. These scripts run only the thread sweep. It prints `vectorJit=slow|fast` itself, so it is a cheap second witness for question 1 on any JVM.
+- The NormPeak microbench (`com.qxotic.jinfer.bench.NormPeak` on branch fixpoint/issue-6-7-kernels, run with `-cp bin/jinfer-bench.jar`) is a kernel loop without a model. These scripts run only the thread sweep. It prints `vectorJit=slow|fast` itself (the same compiler-identity label, not a measurement), so running it under Corretto and under GraalVM is a cheap second witness for question 1.
 - The native image (`runtime: native image`) is a third compiler; it is not in this matrix.
 - The bench README's A, B, B, A ordering rule for two-way comparisons. Each script measures once; repeat a cell (the scripts never overwrite a result file) when a difference is small enough to need it.
