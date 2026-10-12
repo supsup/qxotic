@@ -22,18 +22,18 @@ import org.springframework.util.StringUtils;
  * prompt compiler as a Spring bean.
  *
  * <ul>
- *   <li>WARM-UP ({@code prompt-cache-warmup}) runs at {@link #start()}, once every singleton
- *       exists (the model is loaded) and BEFORE the web server starts (see {@link #getPhase()}),
- *       so the first request to arrive already finds the prompts prefilled. Each entry is pinned
- *       the way {@link JinferChatModel#withCachedPrompt} pins a system prompt: a conversation
- *       opening with it restores the prefix instead of recomputing it.
- *   <li>COMPILE ({@code prompt-cache-persist}) runs right after the warm-up, only when the
- *       catalog does not exist yet: the block layer - which at that point holds exactly the
- *       warm-up prompts, never a conversation - is exported to a sibling temp file and moved into
- *       place atomically. Nothing is mapped yet, so the move is safe on every platform, and a
- *       crash mid-write leaves no catalog rather than a torn one. When the catalog exists the
- *       auto-configuration mounts it read-only and this bean leaves it alone: a changed warm-up
- *       or model is not detected, deleting the file regenerates it.
+ *   <li>WARM-UP ({@code prompt-cache-warmup}) runs at {@link #start()}, once every singleton exists
+ *       (the model is loaded) and BEFORE the web server starts (see {@link #getPhase()}), so the
+ *       first request to arrive already finds the prompts prefilled. Each entry is pinned the way
+ *       {@link JinferChatModel#withCachedPrompt} pins a system prompt: a conversation opening with
+ *       it restores the prefix instead of recomputing it.
+ *   <li>COMPILE ({@code prompt-cache-persist}) runs right after the warm-up, only when the catalog
+ *       does not exist yet: the block layer - which at that point holds exactly the warm-up
+ *       prompts, never a conversation - is exported to a sibling temp file and moved into place
+ *       atomically. Nothing is mapped yet, so the move is safe on every platform, and a crash
+ *       mid-write leaves no catalog rather than a torn one. When the catalog exists the
+ *       auto-configuration mounts it read-only and this bean leaves it alone: a changed warm-up or
+ *       model is not detected, deleting the file regenerates it.
  * </ul>
  *
  * <p>Nothing happens at {@link #stop()}; the mounted catalog is released with the model bean.
@@ -146,9 +146,9 @@ public final class JinferPromptCacheLifecycle implements SmartLifecycle {
 
     /**
      * Each warm-up entry as prompt text: a Spring resource location ({@code file:}, {@code
-     * classpath:}) is read as UTF-8, anything else is the prompt itself. A blank entry or a
-     * missing resource fails the start by name: a warm-up that silently pinned nothing would make
-     * every first request recompute with no diagnostic.
+     * classpath:}) is read as UTF-8, anything else is the prompt itself. A blank entry or a missing
+     * resource fails the start by name: a warm-up that silently pinned nothing would make every
+     * first request recompute with no diagnostic.
      */
     private List<String> resolve(List<String> entries) {
         List<String> prompts = new ArrayList<>(entries.size());
@@ -176,17 +176,17 @@ public final class JinferPromptCacheLifecycle implements SmartLifecycle {
     }
 
     /**
-     * Only an explicit Spring prefix names a resource: a bare path would be indistinguishable
-     * from a prompt that happens to look like one.
+     * Only an explicit Spring prefix names a resource: a bare path would be indistinguishable from
+     * a prompt that happens to look like one.
      */
     private static boolean isResourceLocation(String entry) {
         return entry.startsWith(ResourceLoader.CLASSPATH_URL_PREFIX) || entry.startsWith("file:");
     }
 
     /**
-     * Export to a sibling temp file, then an atomic move into place. The temp file sits next to
-     * the catalog because a move across file systems is a copy, not atomic. The JFR store event
-     * names the temp path (it is emitted by the export); the final path is logged here.
+     * Export to a sibling temp file, then an atomic move into place. The temp file sits next to the
+     * catalog because a move across file systems is a copy, not atomic. The JFR store event names
+     * the temp path (it is emitted by the export); the final path is logged here.
      */
     private void compile(int prompts) {
         Path temp = persist.resolveSibling(persist.getFileName() + ".tmp");

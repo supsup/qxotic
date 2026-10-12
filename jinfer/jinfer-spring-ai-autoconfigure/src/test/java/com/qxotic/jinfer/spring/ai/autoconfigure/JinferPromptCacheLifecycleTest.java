@@ -19,9 +19,9 @@ import org.springframework.context.SmartLifecycle;
 
 /**
  * The warm-up and compile hooks through the real auto-configuration, over the weightless test
- * provider ({@link AutoconfigureTestModelProvider}): no GGUF weights, no network, a real engine
- * and a real block tree. The template records what the warm-up pinned; the catalog on disk is
- * what the first boot compiled; a second boot proves it is mounted and left alone.
+ * provider ({@link AutoconfigureTestModelProvider}): no GGUF weights, no network, a real engine and
+ * a real block tree. The template records what the warm-up pinned; the catalog on disk is what the
+ * first boot compiled; a second boot proves it is mounted and left alone.
  */
 class JinferPromptCacheLifecycleTest {
 

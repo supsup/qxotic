@@ -28,9 +28,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param promptCachePersist path to a compiled-prompt catalog the application owns. It holds the
  *     warm-up prompts' KV state only, never conversations: when the file is absent it is written
  *     once at startup, right after the warm-up; when present it is mounted read-only instead and
- *     the warm-up is served from it. Regenerate it by deleting the file (a changed warm-up or
- *     model is not detected). The parent directory is created at boot; a directory or unwritable
- *     path fails the boot. Mutually exclusive with promptCache
+ *     the warm-up is served from it. Regenerate it by deleting the file (a changed warm-up or model
+ *     is not detected). The parent directory is created at boot; a directory or unwritable path
+ *     fails the boot. Mutually exclusive with promptCache
  * @param retainedSessions live conversation states kept resident and reused append-only when a
  *     request's conversation strictly extends one; default 1, zero retains no completed state
  * @param contextCapacity upper bound on the conversation context (unset: 4096 or the model's
