@@ -14,8 +14,8 @@ import java.util.regex.Pattern;
 
 /**
  * {@code --threads-sweep}: the llama-bench tests (pp, tg) at every thread count in a list, one
- * table per model, with each count's speedup over the smallest and the count from which decode
- * has stopped scaling. The claim under test: decode is memory-bound and saturates at a few threads
+ * table per model, with each count's speedup over the smallest and the count from which decode has
+ * stopped scaling. The claim under test: decode is memory-bound and saturates at a few threads
  * while prefill scales with cores.
  *
  * <p>The thread budget is fixed for the life of a process: {@code RuntimeFlags.THREADS} is read
@@ -142,9 +142,9 @@ final class ThreadSweep {
     }
 
     /**
-     * How to start another copy of this program: the native image itself, or the same JVM with
-     * the same input arguments (module, native-access and -D flags) over the same classpath - as
-     * {@code -jar} when this one was launched that way, so the jar's manifest keeps applying.
+     * How to start another copy of this program: the native image itself, or the same JVM with the
+     * same input arguments (module, native-access and -D flags) over the same classpath - as {@code
+     * -jar} when this one was launched that way, so the jar's manifest keeps applying.
      */
     static List<String> launcher() {
         List<String> command = new ArrayList<>();
@@ -231,8 +231,8 @@ final class ThreadSweep {
     }
 
     /**
-     * One model's table and its plateau line. Speedups are against the smallest count that
-     * measured the test; a skipped test reads {@code n/a}.
+     * One model's table and its plateau line. Speedups are against the smallest count that measured
+     * the test; a skipped test reads {@code n/a}.
      */
     static String table(String model, List<Point> points) {
         List<Point> sorted = new ArrayList<>(points);

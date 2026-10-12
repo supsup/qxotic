@@ -200,10 +200,10 @@ public final class JinferBench {
     }
 
     /**
-     * {@code --threads-sweep}: the pp/tg tests at every listed count, each in its own child
-     * process (the thread budget is fixed per process - see {@link ThreadSweep}), then one table
-     * per model with speedups and the decode plateau. {@code all} is the engine's default, which
-     * this process reports in its header the same way a single run does.
+     * {@code --threads-sweep}: the pp/tg tests at every listed count, each in its own child process
+     * (the thread budget is fixed per process - see {@link ThreadSweep}), then one table per model
+     * with speedups and the decode plateau. {@code all} is the engine's default, which this process
+     * reports in its header the same way a single run does.
      */
     private static void sweep(String[] args, int sweepAt, String list) throws Exception {
         int[] counts = ThreadSweep.parse(list, RuntimeFlags.THREADS);

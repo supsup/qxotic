@@ -103,8 +103,7 @@ class ThreadSweepTest {
         assertEquals(4, ThreadSweep.plateau(points));
         // exactly on the bound (19 = 0.95 * 20) counts, and the order of the list does not matter
         assertEquals(
-                2,
-                ThreadSweep.plateau(List.of(point(4, 1, 20), point(2, 1, 19), point(1, 1, 10))));
+                2, ThreadSweep.plateau(List.of(point(4, 1, 20), point(2, 1, 19), point(1, 1, 10))));
         // a fall-off at high counts does not move the plateau
         List<ThreadSweep.Point> fallOff =
                 List.of(point(1, 1, 10), point(2, 1, 20), point(4, 1, 20), point(8, 1, 15));
@@ -141,7 +140,7 @@ class ThreadSweepTest {
                         new ThreadSweep.Point(2, 150, 1, Double.NaN, Double.NaN));
         String expected =
                 """
-                | model-with-a-long-name | threads |           pp t/s |           tg t/s | tg speedup | pp speedup |
+                | model                  | threads |           pp t/s |           tg t/s | tg speedup | pp speedup |
                 | ---------------------- | ------: | ---------------: | ---------------: | ---------: | ---------: |
                 | model-with-a-long-name |       1 |    100.00 \u00b1 1.00 |              n/a |        n/a |      1.00x |
                 | model-with-a-long-name |       2 |    150.00 \u00b1 1.00 |              n/a |        n/a |      1.50x |
