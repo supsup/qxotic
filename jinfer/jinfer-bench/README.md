@@ -120,7 +120,7 @@ Each child's warm-up progress goes to stderr as usual; the result is one table p
 
 ```bash
 bin/jinfer-bench -m LFM2.5-350M-Q8_0.gguf -p 512 -n 128 -r 5 -w 2 --threads-sweep 1,2,4,all
-make -C jinfer bench-sweep GGUF=LFM2.5-350M-Q8_0.gguf THREADS=1,2,4,all    # JVM, builds the jar first
+make -C jinfer bench-sweep GGUF=LFM2.5-350M-Q8_0.gguf THREADS=1,2,4,all    # JVM, builds the bench jar first
 ```
 
 ```text
@@ -138,7 +138,9 @@ The plateau line names the smallest count whose `tg` is at least 95% of the best
 When that is the largest count in the list, the line ends with `(largest count: lower bound only)`: the sweep found no plateau and bounds it from below rather than locating it, and a wider list or a faster compiler is the next step.
 A test skipped with `-p 0` or `-n 0` reads `n/a`, and without `tg` there is no plateau.
 `--threads-sweep` excludes `-t` and skips the capabilities table.
-`make -C jinfer bench-sweep` resolves `MODEL=<reference>` through `jinfer pull` when `GGUF` is not given, and `BENCH_ARGS` passes the other options through.
+`make -C jinfer bench-sweep` needs `GGUF=<path>` or `MODEL=<reference>` on the command line; a reference is resolved through `jinfer pull` on `bin/jinfer.jar` (`make jar` builds it) and must name exactly one GGUF.
+`BENCH_ARGS` passes the other options through.
+The jar builds run the reactor's `-am` closure, which includes `jam-native` and its cmake step; on a host without cmake add `MAVEN_FLAGS=-Djam.native.skip=true`, and the header then shows `jam: vector, scalar`.
 
 **Warnings.**
 The engine reports each performance cliff once per run, on stderr, as `perf cliff [NAME]: ...`.

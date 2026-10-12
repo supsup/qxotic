@@ -56,17 +56,34 @@ test-golden: jar ## Determinism check: two greedy runs, byte-identical (MODEL=re
 
 # jinfer-bench at each thread count in THREADS, one child process per count (the thread budget
 # is fixed per process), one table per model: pp, tg, speedups, and the count from which decode
-# stops scaling. The bench takes a GGUF path: GGUF=path/to/model.gguf, or MODEL (a reference,
-# as test-golden) resolved through `jinfer pull`, which prints the path. BENCH_ARGS passes
-# anything else through (-p, -n, -r, -w, ...). The OOB flag is the one the README's reported
-# numbers use.
+# stops scaling. The bench takes a GGUF path: GGUF=path/to/model.gguf, or MODEL=<reference>
+# resolved through `jinfer pull` on an already-built CLI jar (make jar). One of the two must be
+# given on the command line: test-golden's MODEL default is an 8B checkpoint, and a sweep that
+# silently pulled it would be a long surprise. `pull` prints one path per file it holds, so the
+# recipe keeps the GGUF line and refuses a reference that resolves to more than one. BENCH_ARGS
+# passes anything else through (-p, -n, -r, -w, ...). The OOB flag is the one the README's
+# reported numbers use. On a host without cmake: MAVEN_FLAGS=-Djam.native.skip=true.
 BENCH_JAR = $(ROOT)/bin/jinfer-bench.jar
 THREADS ?= 1,2,4,all
 BENCH_ARGS ?= -p 512 -n 128 -r 5 -w 2
+MODEL_GIVEN = $(filter command line environment,$(origin MODEL))
 
-bench-sweep: jar bench-jar ## Thread sweep of pp/tg: THREADS=1,2,4,all GGUF=model.gguf (or MODEL=ref) BENCH_ARGS="-r 5"
+bench-sweep: bench-jar ## Thread sweep of pp/tg: THREADS=1,2,4,all with GGUF=model.gguf or MODEL=ref (needs bin/jinfer.jar), BENCH_ARGS="-r 5"
 	@gguf="$(GGUF)"; \
-	if [ -z "$$gguf" ]; then gguf=$$($(JAVA) $(JAVA_RUNTIME_OPTIONS) -jar $(JAR_FILE) pull $(MODEL) | tail -1); fi; \
+	if [ -z "$$gguf" ]; then \
+		if [ -z "$(MODEL_GIVEN)" ]; then \
+			echo "bench-sweep: give GGUF=path/to/model.gguf or MODEL=<reference>" >&2; exit 2; \
+		fi; \
+		if [ ! -f "$(JAR_FILE)" ]; then \
+			echo "bench-sweep: $(JAR_FILE) is missing and MODEL= needs it to pull; make jar" >&2; exit 2; \
+		fi; \
+		pulled=$$($(JAVA) $(JAVA_RUNTIME_OPTIONS) -jar $(JAR_FILE) pull $(MODEL)) || exit 1; \
+		gguf=$$(printf '%s\n' "$$pulled" | grep -i '\.gguf$$'); \
+		if [ "$$(printf '%s\n' "$$gguf" | grep -c .)" != "1" ]; then \
+			echo "bench-sweep: $(MODEL) did not resolve to exactly one GGUF; pass GGUF=:" >&2; \
+			printf '%s\n' "$$pulled" >&2; exit 2; \
+		fi; \
+	fi; \
 	echo "bench-sweep: $$gguf threads=$(THREADS)" >&2; \
 	$(JAVA) $(JAVA_RUNTIME_OPTIONS) -Djdk.incubator.vector.VECTOR_ACCESS_OOB_CHECK=0 -jar $(BENCH_JAR) \
 		-m "$$gguf" $(BENCH_ARGS) --threads-sweep $(THREADS)
