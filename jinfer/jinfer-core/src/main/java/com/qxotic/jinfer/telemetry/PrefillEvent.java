@@ -15,8 +15,8 @@ import jdk.jfr.Threshold;
  * the context fills, which the per-request {@link InferenceEvent#prefillTime} cannot.
  *
  * <p>One event per CHUNK rather than per prompt: the chunk is the unit the kernels see. Low
- * frequency - a 4096-token prompt is eight events at the default width - so it stays on by
- * default, unlike {@link DecodeEvent}.
+ * frequency - a 4096-token prompt is eight events at the default width - so it stays on by default,
+ * unlike {@link DecodeEvent}.
  */
 @Name("jinfer.Prefill")
 @Label("Prefill")

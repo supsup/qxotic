@@ -42,8 +42,16 @@ class JfrTest {
         Path file = dir.resolve("run.jfr");
         var capture = new CliFixtures.Capture("");
         String[] args = {
-            "-m", model.toString(), "instruct", "A prompt.", "-n", "4", "--temp", "0",
-            "--jfr", file.toString()
+            "-m",
+            model.toString(),
+            "instruct",
+            "A prompt.",
+            "-n",
+            "4",
+            "--temp",
+            "0",
+            "--jfr",
+            file.toString()
         };
         int status = Main.run(args, capture.io, ModelStore.of(dir.resolve("cache")));
         assertEquals(0, status, capture.err());

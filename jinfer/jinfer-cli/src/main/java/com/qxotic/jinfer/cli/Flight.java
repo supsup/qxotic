@@ -39,12 +39,17 @@ final class Flight implements AutoCloseable {
     static Flight start(Path file, PrintStream err) throws IOException {
         if (file == null) return new Flight(null, null, err);
         Recording recording = new Recording(settings());
-        recording.setName("jinfer");
-        recording.setToDisk(true);
-        // an unwritable destination is refused HERE, before a model loads for nothing
-        recording.setDestination(file);
-        recording.setDumpOnExit(true); // a signal mid-run still leaves the file behind
-        recording.start();
+        try {
+            recording.setName("jinfer");
+            recording.setToDisk(true);
+            // an unwritable destination is refused HERE, before a model loads for nothing
+            recording.setDestination(file);
+            recording.setDumpOnExit(true); // a signal mid-run still leaves the file behind
+            recording.start();
+        } catch (IOException | RuntimeException e) {
+            recording.close(); // a refused destination must not leak the recording
+            throw e;
+        }
         return new Flight(recording, file, err);
     }
 

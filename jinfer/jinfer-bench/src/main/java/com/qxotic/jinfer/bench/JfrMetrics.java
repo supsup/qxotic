@@ -16,10 +16,10 @@ import jdk.jfr.consumer.RecordedThread;
 import jdk.jfr.consumer.RecordingFile;
 
 /**
- * The numbers a performance question needs, from one recording, as one table: prompt-processing
- * and decode throughput, decode step latency percentiles, model load and tokenizer cost from
- * jinfer's own events; GC pauses, allocation rate and CPU load from the JDK's. What {@code jfr
- * summary} counts and {@code jfr print} lists, reduced. Reads a file; records nothing.
+ * The numbers a performance question needs, from one recording, as one table: prompt-processing and
+ * decode throughput, decode step latency percentiles, model load and tokenizer cost from jinfer's
+ * own events; GC pauses, allocation rate and CPU load from the JDK's. What {@code jfr summary}
+ * counts and {@code jfr print} lists, reduced. Reads a file; records nothing.
  *
  * <p>Throughput comes from the per-chunk and per-token events when the recording has them ({@code
  * jinfer --jfr} switches {@code jinfer.Decode} on) and from the per-request {@code
@@ -239,8 +239,7 @@ public final class JfrMetrics {
                                     ? format(
                                             "%d tokens, %s t/s (per-request timings; enable"
                                                     + " jinfer.Decode for step latencies)",
-                                            outputTokens,
-                                            rate(decodeTokensPerSecond()))
+                                            outputTokens, rate(decodeTokensPerSecond()))
                                     : format(
                                             "%d tokens, %s t/s, step p50 %s, p95 %s, max %s",
                                             decodeSteps.size(),
@@ -265,9 +264,7 @@ public final class JfrMetrics {
                             ? "no collections"
                             : format(
                                     "%d collections, %s paused, longest %s",
-                                    gcs,
-                                    seconds(gcPauseNanos),
-                                    seconds(gcLongestNanos)));
+                                    gcs, seconds(gcPauseNanos), seconds(gcLongestNanos)));
             long allocated = allocatedBytes();
             row(
                     table,

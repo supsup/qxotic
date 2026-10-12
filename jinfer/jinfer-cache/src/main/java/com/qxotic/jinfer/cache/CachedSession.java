@@ -8,6 +8,7 @@ import com.qxotic.jinfer.CheckpointCodec;
 import com.qxotic.jinfer.ContentKey;
 import com.qxotic.jinfer.ContextModel;
 import com.qxotic.jinfer.ContextState;
+import com.qxotic.jinfer.telemetry.PrefillEvent;
 import com.qxotic.jota.memory.MemoryView;
 import com.qxotic.toknroll.IntSequence;
 import java.lang.foreign.Arena;
@@ -219,7 +220,16 @@ public final class CachedSession<S extends ContextState> {
             }
             int off = len;
             long[] f = expected != null ? null : fingerprints(List.of(b));
+            // one jinfer.Prefill per chunk, as Generator's own prompt loop emits; the engine's
+            // complete path ingests here, so a recording of it needs the event from this site too
+            PrefillEvent prefill = new PrefillEvent();
+            prefill.begin();
             model.ingest(state, b);
+            prefill.end();
+            if (prefill.shouldCommit()) {
+                prefill.tokens = b.count();
+                prefill.commit();
+            }
             int n = b.count();
             for (int i = 0; i < n; i++) append(expected != null ? expected[off + i] : f[i]);
             commitSpan(off, len - off);
