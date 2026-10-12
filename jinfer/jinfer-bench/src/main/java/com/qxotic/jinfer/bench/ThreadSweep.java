@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -165,7 +166,9 @@ final class ThreadSweep {
     /**
      * How to start another copy of this program: the native image itself, or the same JVM with the
      * same input arguments (module, native-access and -D flags) over the same classpath - as {@code
-     * -jar} when this one was launched that way, so the jar's manifest keeps applying.
+     * -jar} when this one was launched that way, so the jar's manifest keeps applying. Both carry
+     * the engine's system properties ({@link #forwardedProperties}) as {@code -D} arguments: a
+     * native image has no input-argument list, and a JVM run may have set one programmatically.
      */
     static List<String> launcher() {
         List<String> command = new ArrayList<>();
@@ -175,8 +178,13 @@ final class ThreadSweep {
                         .command()
                         .orElse(Path.of(System.getProperty("java.home"), "bin", "java").toString());
         command.add(self);
-        if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) return command;
+        List<String> forwarded = forwardedProperties(System.getProperties());
+        if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
+            command.addAll(forwarded); // a native image reads -D from its command line too
+            return command;
+        }
         command.addAll(ManagementFactory.getRuntimeMXBean().getInputArguments());
+        command.addAll(forwarded);
         String classPath = System.getProperty("java.class.path", "");
         String mainCommand = System.getProperty("sun.java.command", "");
         boolean launchedAsJar =
@@ -192,6 +200,28 @@ final class ThreadSweep {
             command.add(JinferBench.class.getName());
         }
         return command;
+    }
+
+    /** The property namespaces that decide what the engine measures. */
+    private static final List<String> FORWARDED_PREFIXES =
+            List.of("jinfer.", "jam.", "jdk.incubator.");
+
+    /**
+     * The {@code jinfer.*}, {@code jam.*} and {@code jdk.incubator.*} properties of {@code props}
+     * as {@code -Dkey=value} arguments, sorted by key: what a child must see to measure the same
+     * configuration as its parent (a disabled backend, a conv tile, the vector OOB check). {@code
+     * jinfer.threads} is forwarded like the rest; the child's {@code -t} overrides it at run time.
+     */
+    static List<String> forwardedProperties(Properties props) {
+        TreeSet<String> keys = new TreeSet<>();
+        for (String key : props.stringPropertyNames()) {
+            for (String prefix : FORWARDED_PREFIXES) {
+                if (key.startsWith(prefix)) keys.add(key);
+            }
+        }
+        List<String> out = new ArrayList<>();
+        for (String key : keys) out.add("-D" + key + "=" + props.getProperty(key));
+        return out;
     }
 
     /**
@@ -309,12 +339,16 @@ final class ThreadSweep {
             out.append("plateau: n/a (tg not measured)").append(System.lineSeparator());
         } else {
             out.append(
-                            String.format(
-                                    Locale.ROOT,
-                                    "plateau: tg within %d%% of max from %d threads",
-                                    Math.round(PLATEAU_TOLERANCE * 100),
-                                    from))
-                    .append(System.lineSeparator());
+                    String.format(
+                            Locale.ROOT,
+                            "plateau: tg within %d%% of max from %d threads",
+                            Math.round(PLATEAU_TOLERANCE * 100),
+                            from));
+            // the top of the list is where the sweep stopped looking, not where tg stopped scaling
+            if (from == sorted.get(sorted.size() - 1).threads()) {
+                out.append(" (largest count: lower bound only)");
+            }
+            out.append(System.lineSeparator());
         }
         return out.toString();
     }

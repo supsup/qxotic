@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -61,6 +62,42 @@ class ThreadSweepTest {
                         IllegalArgumentException.class,
                         () -> ThreadSweep.requireDistinctNames(List.of("a-Q8_0", "b", "a-Q8_0")));
         assertTrue(e.getMessage().contains("'a-Q8_0'"), e.getMessage());
+    }
+
+    @Test
+    void forwardedPropertiesAreTheEngineNamespacesSortedAsDArguments() {
+        Properties props = new Properties();
+        props.setProperty("jinfer.convTile", "4x4");
+        props.setProperty("jam.native.disabled", "true");
+        props.setProperty("jdk.incubator.vector.VECTOR_ACCESS_OOB_CHECK", "0");
+        props.setProperty("jinfer.threads", "3");
+        props.setProperty("java.home", "/nowhere");
+        props.setProperty("user.dir", "/elsewhere");
+        props.setProperty("jamboree", "no");
+        assertEquals(
+                List.of(
+                        "-Djam.native.disabled=true",
+                        "-Djdk.incubator.vector.VECTOR_ACCESS_OOB_CHECK=0",
+                        "-Djinfer.convTile=4x4",
+                        "-Djinfer.threads=3"),
+                ThreadSweep.forwardedProperties(props));
+        assertEquals(List.of(), ThreadSweep.forwardedProperties(new Properties()));
+    }
+
+    @Test
+    void plateauOnTheLargestCountIsMarkedAsALowerBound() {
+        List<ThreadSweep.Point> points =
+                List.of(
+                        new ThreadSweep.Point(1, 100, 1, 10, 0.1),
+                        new ThreadSweep.Point(2, 190, 1.9, 19, 0.19),
+                        new ThreadSweep.Point(4, 360, 3.6, 36, 0.36));
+        String table = ThreadSweep.table("m", points);
+        assertTrue(
+                table.endsWith(
+                        "plateau: tg within 5% of max from 4 threads (largest count: lower bound"
+                                + " only)"
+                                + NL),
+                table);
     }
 
     @Test

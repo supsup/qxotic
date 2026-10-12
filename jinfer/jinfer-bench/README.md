@@ -114,7 +114,8 @@ Decode is memory-bound at high thread counts; threads beyond the crossover do no
 ### Thread sweep
 
 `--threads-sweep <list>` measures where that crossover is: `pp` and `tg` at every count in a comma-separated list, where `all` is the engine default.
-The thread budget is read once per process (see the rules below), so the sweep runs one child process per count, the same executable with the same JVM flags and `-t N --no-capabilities`, and parses each child's table.
+The thread budget is read once per process (see the rules below), so the sweep runs one child process per count and parses each child's table.
+A child is the same executable with `-t N --no-capabilities` appended: on the JVM it gets the parent JVM's own input arguments (modules, native access, `-D` flags) over the same classpath; on the JVM and the native image alike it gets the parent's `jinfer.*`, `jam.*` and `jdk.incubator.*` system properties as `-D` arguments, so a disabled backend or a conv tile set on the parent is measured by every child.
 Each child's warm-up progress goes to stderr as usual; the result is one table per model on stdout, counts ascending, duplicates dropped, speedups against the smallest count, then the count from which decode has stopped scaling:
 
 ```bash
@@ -134,7 +135,7 @@ plateau: tg within 5% of max from <N> threads
 ```
 
 The plateau line names the smallest count whose `tg` is at least 95% of the best `tg` in the sweep.
-When that is the largest count in the list, the sweep found no plateau: it bounds the plateau from below rather than locating it, and a wider list or a faster compiler is the next step.
+When that is the largest count in the list, the line ends with `(largest count: lower bound only)`: the sweep found no plateau and bounds it from below rather than locating it, and a wider list or a faster compiler is the next step.
 A test skipped with `-p 0` or `-n 0` reads `n/a`, and without `tg` there is no plateau.
 `--threads-sweep` excludes `-t` and skips the capabilities table.
 `make -C jinfer bench-sweep` resolves `MODEL=<reference>` through `jinfer pull` when `GGUF` is not given, and `BENCH_ARGS` passes the other options through.
