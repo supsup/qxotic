@@ -4,6 +4,7 @@ import com.qxotic.jinfer.codecs.VideoSampler;
 import com.qxotic.jinfer.hub.ModelStore;
 import com.qxotic.jinfer.spring.ai.JinferChatModel;
 import io.micrometer.observation.ObservationRegistry;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import org.springframework.ai.chat.observation.ChatModelObservationConvention;
 import org.springframework.beans.factory.ObjectProvider;
@@ -13,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.util.StringUtils;
 
 /**
@@ -25,6 +27,12 @@ import org.springframework.util.StringUtils;
  * spring.ai.jinfer.chat.model=unsloth/gemma-4-E2B-it-GGUF:Q4_K_M
  * spring.ai.jinfer.chat.temperature=0.7
  * }</pre>
+ *
+ * <p>The prompt cache has three properties: {@code prompt-cache} mounts an artifact read-only;
+ * {@code prompt-cache-warmup} prefills prompts once the model has loaded; {@code
+ * prompt-cache-persist} names a catalog holding those warm-up prompts' state, mounted when it
+ * exists and compiled once at startup when it does not. The last two run through {@link
+ * JinferPromptCacheLifecycle}.
  */
 @AutoConfiguration
 @ConditionalOnClass(JinferChatModel.class)
@@ -88,9 +96,36 @@ public class JinferChatAutoConfiguration {
                                 }
                             });
         }
-        if (StringUtils.hasText(properties.promptCache())) {
+        boolean mount = StringUtils.hasText(properties.promptCache());
+        boolean persist = StringUtils.hasText(properties.promptCachePersist());
+        if (mount && persist) {
+            // the model mounts ONE catalog, and the two properties disagree about writing it
+            throw new IllegalStateException(
+                    "spring.ai.jinfer.chat.prompt-cache and prompt-cache-persist are both set:"
+                            + " prompt-cache is a read-only mount, prompt-cache-persist a catalog"
+                            + " the application rewrites at shutdown - configure one");
+        }
+        if (mount) {
             builder.promptCache(Path.of(properties.promptCache()));
+        } else if (persist) {
+            // an unusable path fails here, before the weights load, not after the warm-up
+            Path catalog =
+                    JinferPromptCacheLifecycle.requireCatalogPath(properties.promptCachePersist());
+            // the catalog compiled by an earlier boot serves this one; absent, the lifecycle
+            // compiles it once after the warm-up
+            if (Files.isRegularFile(catalog)) builder.promptCache(catalog);
         }
         return builder.build();
+    }
+
+    /**
+     * Prefills {@code prompt-cache-warmup} after the model loads and compiles {@code
+     * prompt-cache-persist} when it is absent; a no-op bean when neither is set.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public JinferPromptCacheLifecycle jinferPromptCacheLifecycle(
+            JinferChatModel model, JinferChatProperties properties, ResourceLoader resources) {
+        return new JinferPromptCacheLifecycle(model, properties, resources);
     }
 }

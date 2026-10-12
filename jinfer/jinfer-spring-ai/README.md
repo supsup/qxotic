@@ -89,6 +89,33 @@ Chat is enabled when its model is configured and no other chat provider is selec
 Model sources may be remote references or local paths and resolve during application startup.
 Add companions under `spring.ai.jinfer.chat.companions`, keyed by capability such as `media` or `speculation`.
 
+The prompt cache has three chat properties:
+
+| Property | Effect |
+|----------|--------|
+| `spring.ai.jinfer.chat.prompt-cache` | mounts a cached-prompt artifact read-only at startup; the file is never written |
+| `spring.ai.jinfer.chat.prompt-cache-warmup` | prompts to prefill after the model loads, each pinned as a system-message prefix; an entry is the text itself or a `file:`/`classpath:` resource holding it |
+| `spring.ai.jinfer.chat.prompt-cache-persist` | a catalog holding the warm-up prompts' KV state only, never conversations: mounted when it exists, written once at startup when it does not; regenerate by deleting the file |
+
+```yaml
+spring:
+  ai:
+    jinfer:
+      chat:
+        model: LiquidAI/LFM2.5-350M-GGUF:Q8_0
+        prompt-cache-warmup:
+          - "You are a support assistant for AcmeCloud. Answer in one sentence."
+          - classpath:prompts/billing.txt
+        prompt-cache-persist: ./data/prompts.jkv
+```
+
+Bind warm-up entries as a list (or by index, `prompt-cache-warmup[0]=...`); a single comma-separated value is split on its commas.
+`prompt-cache` and `prompt-cache-persist` are mutually exclusive: the model mounts one catalog.
+The first boot with `prompt-cache-persist` prefills the warm-up prompts and writes the file right then; every later boot mounts it and serves those prompts zero-prefill.
+The file holds the warm-up prompts' KV state only, never conversations, and is never rewritten: delete it to regenerate after changing the prompts.
+The parent directory is created at boot; a path that is a directory or cannot be written fails the boot.
+The catalog is model-identity checked, so a different model or quant refuses it at startup instead of serving wrong bytes.
+
 The [translation table](https://qxotic.ai/jinfer#the-same-knob-at-each-face) maps settings between Spring AI, LangChain4j, the CLI and the server.
 
 ## Add the provider

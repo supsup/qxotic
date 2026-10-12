@@ -2,6 +2,7 @@ package com.qxotic.jinfer.spring.ai.autoconfigure;
 
 import com.qxotic.jinfer.spring.ai.JinferChatOptions;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
@@ -18,6 +19,18 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *     the same path-or-ref form as model
  * @param promptCache path to a cached-prompt artifact (.jkv) to mount read-only at startup;
  *     model-seed-checked
+ * @param promptCacheWarmup prompts to prefill into the cache once the model has loaded, each pinned
+ *     as a system-message prefix so a conversation that opens with it restores instead of
+ *     recomputing; an entry is the prompt text itself, or a Spring resource location ({@code
+ *     file:...}, {@code classpath:...}) whose UTF-8 content is the prompt. Bind entries by index
+ *     ({@code prompt-cache-warmup[0]=...}, or a YAML list): a single comma-separated value is split
+ *     on its commas
+ * @param promptCachePersist path to a compiled-prompt catalog the application owns. It holds the
+ *     warm-up prompts' KV state only, never conversations: when the file is absent it is written
+ *     once at startup, right after the warm-up; when present it is mounted read-only instead and
+ *     the warm-up is served from it. Regenerate it by deleting the file (a changed warm-up or
+ *     model is not detected). The parent directory is created at boot; a directory or unwritable
+ *     path fails the boot. Mutually exclusive with promptCache
  * @param retainedSessions live conversation states kept resident and reused append-only when a
  *     request's conversation strictly extends one; default 1, zero retains no completed state
  * @param contextCapacity upper bound on the conversation context (unset: 4096 or the model's
@@ -45,6 +58,8 @@ public record JinferChatProperties(
         String model,
         Map<String, String> companions,
         String promptCache,
+        List<String> promptCacheWarmup,
+        String promptCachePersist,
         @DefaultValue("1") int retainedSessions,
         Integer contextCapacity,
         Double temperature,

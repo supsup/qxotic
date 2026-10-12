@@ -85,6 +85,22 @@ class JinferChatAutoConfigurationTest {
     }
 
     @Test
+    void aReadOnlyMountAndAPersistedCatalogTogetherAreRefusedBeforeResolution() {
+        // the model mounts ONE catalog; the two properties disagree about writing it
+        runner.withPropertyValues(
+                        "spring.ai.jinfer.chat.model=/missing.gguf",
+                        "spring.ai.jinfer.chat.prompt-cache=/personas.jkv",
+                        "spring.ai.jinfer.chat.prompt-cache-persist=/var/jinfer/prompts.jkv")
+                .run(
+                        context -> {
+                            assertThat(context).hasFailed();
+                            assertThat(context.getStartupFailure())
+                                    .hasStackTraceContaining(
+                                            "prompt-cache and prompt-cache-persist are both set");
+                        });
+    }
+
+    @Test
     void modelUrlIsRejectedBeforeResolution() {
         runner.withPropertyValues("spring.ai.jinfer.chat.model=https://example.org/model.gguf")
                 .run(
@@ -134,6 +150,9 @@ class JinferChatAutoConfigurationTest {
                         "spring.ai.jinfer.chat.model=/x.gguf",
                         "spring.ai.jinfer.chat.companions.media=/mmproj.gguf",
                         "spring.ai.jinfer.chat.prompt-cache=/personas.jkv",
+                        "spring.ai.jinfer.chat.prompt-cache-warmup[0]=You are terse, and precise.",
+                        "spring.ai.jinfer.chat.prompt-cache-warmup[1]=file:/personas/support.txt",
+                        "spring.ai.jinfer.chat.prompt-cache-persist=/var/jinfer/prompts.jkv",
                         "spring.ai.jinfer.chat.retained-sessions=0",
                         "spring.ai.jinfer.chat.context-capacity=8192",
                         "spring.ai.jinfer.chat.temperature=0.7",
@@ -153,6 +172,12 @@ class JinferChatAutoConfigurationTest {
                             assertThat(p.model()).isEqualTo("/x.gguf");
                             assertThat(p.companions()).containsEntry("media", "/mmproj.gguf");
                             assertThat(p.promptCache()).isEqualTo("/personas.jkv");
+                            // indexed entries keep their commas; a single value would be split
+                            assertThat(p.promptCacheWarmup())
+                                    .containsExactly(
+                                            "You are terse, and precise.",
+                                            "file:/personas/support.txt");
+                            assertThat(p.promptCachePersist()).isEqualTo("/var/jinfer/prompts.jkv");
                             assertThat(p.retainedSessions()).isZero();
                             assertThat(p.contextCapacity()).isEqualTo(8192);
                             assertThat(p.temperature()).isEqualTo(0.7);
