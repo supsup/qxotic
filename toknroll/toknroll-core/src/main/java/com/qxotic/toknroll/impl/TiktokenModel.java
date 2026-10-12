@@ -3,7 +3,9 @@ package com.qxotic.toknroll.impl;
 import com.qxotic.toknroll.ByteLevel;
 import com.qxotic.toknroll.IntSequence;
 import com.qxotic.toknroll.Vocabulary;
-import java.lang.reflect.Method;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;
@@ -29,7 +31,29 @@ final class TiktokenModel extends AbstractTokenizationModel {
     private static final int SCRATCH_MAX_RETAINED_ELEMENTS = 128 * 1024;
     private static final int NO_TOKEN = -1;
     private static final int NO_INDEX = -1;
-    private static final Method THREAD_IS_VIRTUAL_METHOD = resolveThreadIsVirtualMethod();
+
+    /**
+     * {@code Thread.isVirtual()} as a method handle, or null on a JDK without it. The library
+     * compiles to Java 11, where the method does not exist, so a direct call is out; this is the
+     * next best thing. A {@code static final} handle is a constant to the JIT, and {@code
+     * invokeExact} with the exact {@code (Thread)boolean} signature compiles to a direct call with
+     * no argument array, no boxing and no reflective dispatch - where {@code Method.invoke} wrapped
+     * the receiver, boxed the result and stood in the way of inlining acquireScratch and
+     * releaseScratch, both called once per tokenized chunk.
+     */
+    private static final MethodHandle THREAD_IS_VIRTUAL;
+
+    static {
+        MethodHandle handle;
+        try {
+            MethodType type = MethodType.methodType(boolean.class);
+            handle = MethodHandles.publicLookup().findVirtual(Thread.class, "isVirtual", type);
+        } catch (NoSuchMethodException | IllegalAccessException e) {
+            // Thread.isVirtual() may not exist on Java < 19. Assume virtual threads aren't in use.
+            handle = null;
+        }
+        THREAD_IS_VIRTUAL = handle;
+    }
 
     private final LongLongMap merges;
     private final int[] singleByteTokenId;
@@ -336,22 +360,15 @@ final class TiktokenModel extends AbstractTokenizationModel {
         }
     }
 
-    private static Method resolveThreadIsVirtualMethod() {
-        try {
-            return Thread.class.getMethod("isVirtual");
-        } catch (NoSuchMethodException e) {
-            return null;
-        }
-    }
-
     private static boolean isCurrentThreadVirtual() {
-        if (THREAD_IS_VIRTUAL_METHOD == null) {
+        if (THREAD_IS_VIRTUAL == null) {
             return false;
         }
         try {
-            return Boolean.TRUE.equals(THREAD_IS_VIRTUAL_METHOD.invoke(Thread.currentThread()));
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            // Thread.isVirtual() may not exist on Java < 19. Assume virtual threads aren't in use.
+            return (boolean) THREAD_IS_VIRTUAL.invokeExact(Thread.currentThread());
+        } catch (Throwable e) {
+            // invokeExact declares Throwable; isVirtual() itself throws nothing. Same answer as
+            // before on anything unexpected: not a virtual thread.
             return false;
         }
     }
