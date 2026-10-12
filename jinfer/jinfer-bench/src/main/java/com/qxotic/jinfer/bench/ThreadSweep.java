@@ -6,8 +6,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -89,6 +92,24 @@ final class ThreadSweep {
             counts.add(count);
         }
         return counts.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    /**
+     * The tables are keyed by the name a child prints, the model file's base name, so two {@code
+     * -m} paths that differ only by directory would land in one table with their rows interleaved.
+     * Refused here, before any child runs, rather than five minutes in.
+     */
+    static void requireDistinctNames(List<String> names) {
+        Set<String> seen = new HashSet<>();
+        for (String name : names) {
+            if (!seen.add(name)) {
+                throw new IllegalArgumentException(
+                        "--threads-sweep keys its tables by model file name and two models are"
+                                + " both named '"
+                                + name
+                                + "'; rename one");
+            }
+        }
     }
 
     /** The list as the header line shows it: {@code 1,2,4,8}. */
@@ -173,15 +194,21 @@ final class ThreadSweep {
         return command;
     }
 
-    /** A child's table row: {@code | model | threads | ppNNN | mean +- stddev |}. */
+    /**
+     * A child's table row: {@code | model | threads | ppNNN | mean +- stddev |}. Decimals are
+     * {@code Locale.ROOT} on both sides (the child's printTable, this class's cells), so a
+     * comma-decimal default locale neither skips every row here nor prints one.
+     */
     private static final Pattern ROW =
             Pattern.compile(
                     "^\\|\\s*(.*?)\\s*\\|\\s*(\\d+)\\s*\\|\\s*(pp|tg)(\\S*)\\s*\\|"
                             + "\\s*([0-9.]+)\\s*\\u00b1\\s*([0-9.]+)\\s*\\|\\s*$");
 
     /**
-     * The pp/tg rows of one child's stdout as one point per model. A row whose threads column is
-     * not {@code threads} means the count did not reach the engine, and is a failure.
+     * The pp/tg rows of one child's stdout as one point per model. The child's threads column is
+     * {@code RuntimeFlags.THREADS} read back after {@code -t} set it ({@code
+     * JinferBench.engineThreads}), not the parsed option echoed, so a row whose column is not
+     * {@code threads} means the count did not reach the engine, and is a failure.
      */
     static Map<String, Point> parseChild(String stdout, int threads) {
         Map<String, double[]> cells = new LinkedHashMap<>();
@@ -247,9 +274,17 @@ final class ThreadSweep {
         StringBuilder out = new StringBuilder();
         out.append(
                 String.format(
-                        fmt, "model", "threads", "pp t/s", "tg t/s", "tg speedup", "pp speedup"));
+                        Locale.ROOT,
+                        fmt,
+                        "model",
+                        "threads",
+                        "pp t/s",
+                        "tg t/s",
+                        "tg speedup",
+                        "pp speedup"));
         out.append(
                 String.format(
+                        Locale.ROOT,
                         fmt,
                         "-".repeat(w),
                         "------:",
@@ -260,6 +295,7 @@ final class ThreadSweep {
         for (Point p : sorted) {
             out.append(
                     String.format(
+                            Locale.ROOT,
                             fmt,
                             model,
                             p.threads(),
@@ -274,18 +310,20 @@ final class ThreadSweep {
         } else {
             out.append(
                             String.format(
+                                    Locale.ROOT,
                                     "plateau: tg within %d%% of max from %d threads",
-                                    Math.round(PLATEAU_TOLERANCE * 100), from))
+                                    Math.round(PLATEAU_TOLERANCE * 100),
+                                    from))
                     .append(System.lineSeparator());
         }
         return out.toString();
     }
 
     private static String measurement(double mean, double stddev) {
-        return String.format("%.2f \u00b1 %.2f", mean, stddev);
+        return String.format(Locale.ROOT, "%.2f \u00b1 %.2f", mean, stddev);
     }
 
     private static String speedup(double value, double base) {
-        return String.format("%.2fx", value / base);
+        return String.format(Locale.ROOT, "%.2fx", value / base);
     }
 }

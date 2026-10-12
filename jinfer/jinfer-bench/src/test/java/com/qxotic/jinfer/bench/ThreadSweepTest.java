@@ -53,6 +53,17 @@ class ThreadSweepTest {
     }
 
     @Test
+    void distinctNamesPassAndACollisionIsRefusedBeforeAnyChildRuns() {
+        ThreadSweep.requireDistinctNames(List.of("a-Q8_0", "a-Q4_0", "b-Q8_0"));
+        ThreadSweep.requireDistinctNames(List.of());
+        IllegalArgumentException e =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> ThreadSweep.requireDistinctNames(List.of("a-Q8_0", "b", "a-Q8_0")));
+        assertTrue(e.getMessage().contains("'a-Q8_0'"), e.getMessage());
+    }
+
+    @Test
     void labelListsCountsInOrder() {
         assertEquals("1,2,4", ThreadSweep.label(new int[] {1, 2, 4}));
         assertEquals("8", ThreadSweep.label(new int[] {8}));

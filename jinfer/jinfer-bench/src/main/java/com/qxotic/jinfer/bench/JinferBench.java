@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -102,6 +103,12 @@ public final class JinferBench {
             switch (args[i]) {
                 case "-m", "--model" -> models.add(args[++i]);
                 case "--threads-sweep" -> {
+                    if (sweep != null) {
+                        // the children inherit every other option; a second copy would reach
+                        // them and fail there, five minutes in, instead of here
+                        System.err.println("--threads-sweep given more than once");
+                        System.exit(2);
+                    }
                     sweepAt = i;
                     sweep = args[++i];
                 }
@@ -147,15 +154,13 @@ public final class JinferBench {
                 System.err.println("-t and --threads-sweep exclude each other");
                 System.exit(2);
             }
-            sweep(args, sweepAt, sweep);
+            sweep(args, sweepAt, sweep, models);
             return;
         }
 
-        // -t sets the engine's one thread budget (BEFORE RuntimeFlags initializes); without it
-        // the run measures the engine's own default - one thread per physical core.
-        if (threads > 0) System.setProperty("jinfer.threads", Integer.toString(threads));
-        System.out.println(header(threads > 0));
-        if (threads <= 0) threads = RuntimeFlags.THREADS;
+        boolean threadsRequested = threads > 0;
+        threads = engineThreads(threads);
+        System.out.println(header(threadsRequested));
 
         List<Row> rows = new ArrayList<>();
         List<CapRow> caps = new ArrayList<>();
@@ -205,8 +210,10 @@ public final class JinferBench {
      * with speedups and the decode plateau. {@code all} is the engine's default, which this process
      * reports in its header the same way a single run does.
      */
-    private static void sweep(String[] args, int sweepAt, String list) throws Exception {
+    private static void sweep(String[] args, int sweepAt, String list, List<String> models)
+            throws Exception {
         int[] counts = ThreadSweep.parse(list, RuntimeFlags.THREADS);
+        ThreadSweep.requireDistinctNames(models.stream().map(JinferBench::name).toList());
         List<String> childArgs = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {
             if (i == sweepAt || i == sweepAt + 1) continue;
@@ -220,6 +227,19 @@ public final class JinferBench {
             first = false;
             System.out.print(ThreadSweep.table(e.getKey(), e.getValue()));
         }
+    }
+
+    /**
+     * The thread budget the rows report. {@code -t} ({@code requested > 0}) sets the engine's one
+     * budget, which must happen BEFORE {@code RuntimeFlags} initializes; without it the run measures
+     * the engine's own default, one thread per physical core. Either way the value returned is what
+     * the engine runs with, read back from {@code RuntimeFlags}, never the request echoed: a sweep
+     * child's threads column is checked against the count it was asked for, and that check only
+     * proves something if the column is the engine's truth.
+     */
+    static int engineThreads(int requested) {
+        if (requested > 0) System.setProperty("jinfer.threads", Integer.toString(requested));
+        return RuntimeFlags.THREADS;
     }
 
     /**
@@ -615,7 +635,7 @@ public final class JinferBench {
                     r.model,
                     r.threads,
                     r.test,
-                    String.format("%.2f ± %.2f", r.mean, r.stddev));
+                    String.format(Locale.ROOT, "%.2f ± %.2f", r.mean, r.stddev));
     }
 
     private static void printCaps(List<CapRow> rows) {
