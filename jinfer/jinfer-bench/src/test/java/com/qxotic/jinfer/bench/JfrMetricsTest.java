@@ -1,7 +1,9 @@
 package com.qxotic.jinfer.bench;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.qxotic.jinfer.telemetry.DecodeEvent;
 import com.qxotic.jinfer.telemetry.InferenceEvent;
@@ -116,7 +118,10 @@ class JfrMetricsTest {
         assertEquals(1, report.inferences);
         assertEquals(1, report.firstTokenNanos.size());
         assertTrue(report.gcs >= 1, "System.gc() under a recording emits jdk.GarbageCollection");
-        assertTrue(report.allocatedBytes() >= 0);
+        // 5 ms periodic readings either side of the allocation: every thread read twice or more
+        // contributes a delta, so the figure is measured, not a fallback
+        assertNotEquals(JfrMetrics.AllocationSource.UNAVAILABLE, report.allocation().source());
+        assertNotEquals(JfrMetrics.AllocationSource.SAMPLED, report.allocation().source());
         assertTrue(report.span().toMillis() >= 30, "two 15 ms sleeps: " + report.span());
 
         String table = report.render();
@@ -186,6 +191,97 @@ class JfrMetricsTest {
         assertTrue(table.contains("| prefill | n/a |"), table);
         assertTrue(table.contains("| decode | n/a |"), table);
         assertTrue(table.contains("| cpu | n/a |"), table);
+    }
+
+    @Test
+    void oneCumulativeReadingIsNotADeltaSoTheSamplesServe() {
+        JfrMetrics.Report report = new JfrMetrics.Report();
+        report.threadAllocated(1, 1L << 20); // a level, read once: first == last
+        report.allocationSample(4096);
+        JfrMetrics.Allocation allocation = report.allocation();
+        assertEquals(JfrMetrics.AllocationSource.SAMPLED, allocation.source());
+        assertEquals(4096, allocation.bytes());
+        String cell = allocation.render(1_000_000_000L);
+        assertEquals("4.0 KB, 4.0 KB/s (sampled, an estimate)", cell);
+        assertTrue(!cell.startsWith("0 B"), cell);
+    }
+
+    @Test
+    void twoCumulativeReadingsAreAnExactDelta() {
+        JfrMetrics.Report report = new JfrMetrics.Report();
+        report.threadAllocated(1, 1000);
+        report.threadAllocated(1, 5000);
+        report.threadAllocated(2, 200);
+        report.threadAllocated(2, 300);
+        report.threadAllocated(2, 1300);
+        report.allocationSample(1 << 20); // the exact counters win over the estimate
+        JfrMetrics.Allocation allocation = report.allocation();
+        assertEquals(JfrMetrics.AllocationSource.EXACT_DELTA, allocation.source());
+        assertEquals(4000 + 1100, allocation.bytes());
+        assertEquals(2, allocation.threads());
+        assertEquals(
+                "5.0 KB, 5.0 KB/s (exact-delta, 2 threads)", allocation.render(1_000_000_000L));
+    }
+
+    @Test
+    void someThreadsReadOnceIsPartial() {
+        JfrMetrics.Report report = new JfrMetrics.Report();
+        report.threadAllocated(1, 1000);
+        report.threadAllocated(1, 3048);
+        report.threadAllocated(2, 1L << 30); // read once: excluded, not counted as zero
+        report.allocationSample(4096);
+        JfrMetrics.Allocation allocation = report.allocation();
+        assertEquals(JfrMetrics.AllocationSource.PARTIAL, allocation.source());
+        assertEquals(2048, allocation.bytes());
+        assertEquals(1, allocation.threads());
+        assertEquals(2, allocation.threadsSeen());
+        assertEquals(
+                "2.0 KB, 2.0 KB/s (partial: exact-delta of 1 of 2 threads)",
+                allocation.render(1_000_000_000L));
+    }
+
+    @Test
+    void noUsableAllocationSourceIsUnavailableNotZero(@TempDir Path dir) throws Exception {
+        JfrMetrics.Report nothing = new JfrMetrics.Report();
+        assertEquals(JfrMetrics.AllocationSource.UNAVAILABLE, nothing.allocation().source());
+        assertEquals("unavailable", nothing.allocation().render(1_000_000_000L));
+
+        JfrMetrics.Report onceEach = new JfrMetrics.Report();
+        onceEach.threadAllocated(1, 4096);
+        onceEach.threadAllocated(2, 8192);
+        assertEquals(JfrMetrics.AllocationSource.UNAVAILABLE, onceEach.allocation().source());
+
+        // and from a real file: an empty recording has no allocation events at all
+        Path file = dir.resolve("no-allocation.jfr");
+        try (Recording recording = new Recording()) {
+            recording.start();
+            recording.stop();
+            recording.dump(file);
+        }
+        String table = JfrMetrics.read(file).render();
+        assertTrue(table.contains("| allocation | unavailable |"), table);
+        assertTrue(!table.contains("| allocation | 0 B"), table);
+    }
+
+    @Test
+    void aRealRecordingWithOneReadingPerThreadReportsNoDelta(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("end-chunk.jfr");
+        try (Recording recording = new Recording()) {
+            // one reading per thread, at the end of the (single) chunk: a level, not a delta
+            recording.enable("jdk.ThreadAllocationStatistics").with("period", "endChunk");
+            recording.start();
+            byte[] garbage = new byte[1 << 20];
+            assertEquals(1 << 20, garbage.length);
+            recording.stop();
+            recording.dump(file);
+        }
+        JfrMetrics.Report report = JfrMetrics.read(file);
+        assumeTrue(!report.threadAllocated.isEmpty(), "the JDK emitted no end-of-chunk reading");
+        assumeTrue(
+                report.threadAllocated.values().stream().allMatch(range -> range[2] == 1),
+                "the recording rotated, so some thread was read twice");
+        assertEquals(JfrMetrics.AllocationSource.UNAVAILABLE, report.allocation().source());
+        assertTrue(report.render().contains("| allocation | unavailable |"), report.render());
     }
 
     @Test

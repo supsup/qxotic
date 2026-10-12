@@ -59,12 +59,16 @@ Its table has one row per question, in this shape (the numbers here are placehol
 | decode | 64 tokens, 241.9 t/s, step p50 4.0 ms, p95 4.6 ms, max 9.8 ms |
 | time to first token | p50 31.2 ms, max 31.2 ms over 1 requests |
 | gc | 2 collections, 3.1 ms paused, longest 2.0 ms |
-| allocation | 48.2 MB, 11.7 MB/s |
+| allocation | 48.2 MB, 11.7 MB/s (exact-delta, 14 threads) |
 | cpu | jvm 71.3 % (user 69.8 %, system 1.5 %), machine 74.0 % |
 ```
 
 Throughput comes from the per-chunk and per-token events when the recording has them, and from the per-request `jinfer.Inference` timings otherwise; a row whose events are absent reads `n/a` rather than zero.
-Allocation prefers the exact per-thread counters (`jdk.ThreadAllocationStatistics`, in the JDK's default settings) over the sampled weights (`jdk.ObjectAllocationSample`).
+The allocation row says where its number came from.
+`jdk.ThreadAllocationStatistics` is a cumulative per-thread counter, so a thread read once says nothing about the recording; a thread read twice or more gives an exact delta.
+`exact-delta` is the sum over threads when every thread seen was read at least twice, and `partial` names how many of them were, summing only those (a lower bound).
+With no thread read twice the figure is the sum of the `jdk.ObjectAllocationSample` weights, marked `sampled, an estimate`.
+With neither the row reads `unavailable`, never `0 B`.
 Decode throughput here is tokens over the summed step durations, which is what `tg128` measures; the CLI's own `generation:` line divides by wall time from the prompt's end, which also counts the listener's work.
 
 The JDK's `jfr` tool prints anything else:

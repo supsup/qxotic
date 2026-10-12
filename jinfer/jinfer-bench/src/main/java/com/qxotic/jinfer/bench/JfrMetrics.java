@@ -24,8 +24,15 @@ import jdk.jfr.consumer.RecordingFile;
  * <p>Throughput comes from the per-chunk and per-token events when the recording has them ({@code
  * jinfer --jfr} switches {@code jinfer.Decode} on) and from the per-request {@code
  * jinfer.Inference} timings otherwise; a row whose events are absent reads {@code n/a} rather than
- * zero. Allocation prefers the exact per-thread counters ({@code jdk.ThreadAllocationStatistics},
- * in the JDK's default settings) over the sampled weights ({@code jdk.ObjectAllocationSample}).
+ * zero.
+ *
+ * <p>Allocation names its source, because the three are not the same claim. {@code
+ * jdk.ThreadAllocationStatistics} is a CUMULATIVE per-thread counter, so one reading of a thread
+ * says nothing about the recording and two give an exact delta: {@code exact-delta} when every
+ * thread seen has two, {@code partial} when only some do (their deltas, and how many). With no
+ * thread read twice the figure is the sum of the {@code jdk.ObjectAllocationSample} weights,
+ * labelled {@code sampled} - an estimate. With neither it reads {@code unavailable}, never {@code 0
+ * B}.
  *
  * <pre>java -cp jinfer-bench.jar com.qxotic.jinfer.bench.JfrMetrics run.jfr</pre>
  */
@@ -80,9 +87,13 @@ public final class JfrMetrics {
         int gcs;
         long gcPauseNanos, gcLongestNanos;
 
-        /** Per JFR thread id: the first and the latest cumulative {@code allocated} reading. */
+        /**
+         * Per JFR thread id: the first cumulative {@code allocated} reading, the latest, and how
+         * many readings there were. One reading is a level, not a delta.
+         */
         final Map<Long, long[]> threadAllocated = new HashMap<>();
 
+        int allocationSamples;
         long sampledAllocationBytes;
 
         int cpuSamples;
@@ -137,15 +148,9 @@ public final class JfrMetrics {
                 case "jdk.ThreadAllocationStatistics" -> {
                     RecordedThread thread = event.getThread("thread");
                     if (thread == null) break;
-                    long allocated = event.getLong("allocated");
-                    long[] range =
-                            threadAllocated.computeIfAbsent(
-                                    thread.getId(), id -> new long[] {allocated, allocated});
-                    range[1] = allocated;
+                    threadAllocated(thread.getId(), event.getLong("allocated"));
                 }
-                case "jdk.ObjectAllocationSample" -> {
-                    sampledAllocationBytes += event.getLong("weight");
-                }
+                case "jdk.ObjectAllocationSample" -> allocationSample(event.getLong("weight"));
                 case "jdk.CPULoad" -> {
                     cpuSamples++;
                     jvmUser += event.getFloat("jvmUser");
@@ -154,6 +159,21 @@ public final class JfrMetrics {
                 }
                 default -> {}
             }
+        }
+
+        /** One cumulative {@code jdk.ThreadAllocationStatistics} reading of one thread. */
+        void threadAllocated(long threadId, long allocated) {
+            long[] range =
+                    threadAllocated.computeIfAbsent(
+                            threadId, id -> new long[] {allocated, allocated, 0});
+            range[1] = allocated;
+            range[2]++;
+        }
+
+        /** One {@code jdk.ObjectAllocationSample}; its weight estimates the bytes it stands for. */
+        void allocationSample(long weight) {
+            allocationSamples++;
+            sampledAllocationBytes += weight;
         }
 
         /** First event start to last event end; zero for an empty recording. */
@@ -182,12 +202,31 @@ public final class JfrMetrics {
             return percentile(decodeSteps, q);
         }
 
-        /** Bytes allocated: exact per-thread deltas when sampled, the sample weights otherwise. */
-        long allocatedBytes() {
-            if (threadAllocated.isEmpty()) return sampledAllocationBytes;
-            long total = 0;
-            for (long[] range : threadAllocated.values()) total += range[1] - range[0];
-            return total;
+        /**
+         * Bytes allocated over the recording, with where the number came from. A thread's
+         * cumulative counter contributes only when it was read at least twice: a single reading
+         * has first == last, and that zero is the absence of a delta, not a measurement of one.
+         */
+        Allocation allocation() {
+            long delta = 0;
+            int measured = 0;
+            for (long[] range : threadAllocated.values()) {
+                if (range[2] < 2) continue;
+                delta += range[1] - range[0];
+                measured++;
+            }
+            int seen = threadAllocated.size();
+            if (measured > 0) {
+                return new Allocation(
+                        measured == seen ? AllocationSource.EXACT_DELTA : AllocationSource.PARTIAL,
+                        delta,
+                        measured,
+                        seen);
+            }
+            if (allocationSamples > 0) {
+                return new Allocation(AllocationSource.SAMPLED, sampledAllocationBytes, 0, seen);
+            }
+            return new Allocation(AllocationSource.UNAVAILABLE, 0, 0, seen);
         }
 
         void print(PrintStream out) {
@@ -265,17 +304,7 @@ public final class JfrMetrics {
                             : format(
                                     "%d collections, %s paused, longest %s",
                                     gcs, seconds(gcPauseNanos), seconds(gcLongestNanos)));
-            long allocated = allocatedBytes();
-            row(
-                    table,
-                    "allocation",
-                    threadAllocated.isEmpty() && sampledAllocationBytes == 0
-                            ? "n/a"
-                            : bytes(allocated)
-                                    + ", "
-                                    + bytes((long) perSecond(allocated, span().toNanos()))
-                                    + "/s"
-                                    + (threadAllocated.isEmpty() ? " (sampled)" : ""));
+            row(table, "allocation", allocation().render(span().toNanos()));
             row(
                     table,
                     "cpu",
@@ -292,6 +321,52 @@ public final class JfrMetrics {
 
         private static void row(StringBuilder table, String metric, String value) {
             table.append("| ").append(metric).append(" | ").append(value).append(" |\n");
+        }
+    }
+
+    /** Where an allocation figure came from; the label is what the table prints. */
+    enum AllocationSource {
+        /** Every thread seen was read twice: the sum of their counter deltas. */
+        EXACT_DELTA("exact-delta"),
+        /** Only some threads were read twice: the deltas of those, a lower bound. */
+        PARTIAL("partial"),
+        /** No thread was read twice: the sum of the allocation sample weights, an estimate. */
+        SAMPLED("sampled"),
+        /** No thread read twice and no samples: there is no number to print. */
+        UNAVAILABLE("unavailable");
+
+        final String label;
+
+        AllocationSource(String label) {
+            this.label = label;
+        }
+    }
+
+    /**
+     * An allocation figure and its source. {@code threads} is how many threads contributed a
+     * counter delta, {@code threadsSeen} how many had any counter reading; {@code bytes} means
+     * nothing when the source is {@link AllocationSource#UNAVAILABLE}.
+     */
+    record Allocation(AllocationSource source, long bytes, int threads, int threadsSeen) {
+
+        /** The table cell: the number, its rate over a non-empty span, and the source. */
+        String render(long spanNanos) {
+            if (source == AllocationSource.UNAVAILABLE) return source.label;
+            // an empty span has no rate; printing one would be the same false zero as the bytes
+            String rate =
+                    spanNanos > 0
+                            ? ", " + JfrMetrics.bytes((long) perSecond(bytes, spanNanos)) + "/s"
+                            : "";
+            String detail =
+                    switch (source) {
+                        case EXACT_DELTA -> format("%s, %d threads", source.label, threads);
+                        case PARTIAL ->
+                                format(
+                                        "%s: exact-delta of %d of %d threads",
+                                        source.label, threads, threadsSeen);
+                        default -> source.label + ", an estimate";
+                    };
+            return JfrMetrics.bytes(bytes) + rate + " (" + detail + ")";
         }
     }
 
