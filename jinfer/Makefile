@@ -54,10 +54,29 @@ test-golden: jar ## Determinism check: two greedy runs, byte-identical (MODEL=re
 	@$(GOLDEN_RUN) > /tmp/jinfer-golden-2.txt 2> /tmp/jinfer-golden-2.err || { cat /tmp/jinfer-golden-2.err >&2; exit 1; }
 	@diff /tmp/jinfer-golden-1.txt /tmp/jinfer-golden-2.txt && echo "test-golden: deterministic"
 
+##@ Profiling (JFR)
+
+# The jfr tool ships beside java in every JDK; JAVA_HOME is honored as it is for native-image.
+JFR_TOOL ?= $(if $(JAVA_HOME),$(JAVA_HOME)/bin/jfr,jfr)
+# The recording jfr-run writes and jfr-summary reads; FILE=path overrides it.
+FILE ?= jinfer.jfr
+# The golden prompt, recorded: the same work test-golden times, so the two agree on what ran.
+JFR_RUN = $(GOLDEN_RUN) --jfr $(FILE)
+
+jfr-run: jar ## One greedy instruct run recorded to FILE (default jinfer.jfr; MODEL=ref or path)
+	$(JFR_RUN)
+
+jfr-summary: ## jfr summary plus every jinfer.* event of FILE, as the JDK's jfr tool prints them
+	$(JFR_TOOL) summary $(FILE)
+	$(JFR_TOOL) print --events 'jinfer.*' $(FILE)
+
+jfr-metrics: ## The metrics table of FILE (alias into the root Makefile, which builds the reader)
+	$(MAKE) -C $(ROOT) jfr-metrics FILE=$(abspath $(FILE))
+
 help: ## Show this help
 	@awk 'BEGIN { FS = " *## *" } \
 		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5); next } \
 		NF >= 2 && $$1 ~ /^[a-zA-Z_-]+:/ { t = $$1; sub(/:.*/, "", t); \
 			printf "  \033[36m%-16s\033[0m %s\n", t, $$2 }' $(MAKEFILE_LIST)
 
-.PHONY: default help jar test native clean run run-jar-command test-golden
+.PHONY: default help jar test native clean run run-jar-command test-golden jfr-run jfr-summary jfr-metrics

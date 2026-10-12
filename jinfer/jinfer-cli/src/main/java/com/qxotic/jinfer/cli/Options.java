@@ -62,6 +62,7 @@ final class Options {
     boolean echo;
     boolean rawPrompt;
     String color = "auto";
+    Path jfr;
 
     final Server.Settings server = new Server.Settings();
     final Speak.Settings speech = new Speak.Settings();
@@ -250,6 +251,10 @@ final class Options {
                         promptCache = Path.of(a.value());
                         promptCacheReadOnly = a.name.equals("--cache-ro");
                         yield Set.of("instruct", "server");
+                    }
+                    case "--jfr" -> {
+                        jfr = Path.of(a.value());
+                        yield MODEL_COMMANDS; // every command that loads a model can be profiled
                     }
                     default -> null;
                 };
@@ -652,6 +657,7 @@ final class Options {
                   --with <role>=<path|ref>     attach a companion; repeat for other roles
                   -t, --threads <int>          compute workers (default: physical/fast cores)
                                                overrides -Djinfer.threads when both are given
+                  --jfr <file>                 JFR recording of the run, per-token Decode on
 
                 References: [host/]owner/repo[@revision][/file][:quant]. Default host: hf.co.
                 Existing local files win. Remote files are downloaded once and cached.

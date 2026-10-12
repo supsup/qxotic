@@ -87,14 +87,18 @@ public final class Main {
                 status = Hub.run(options, io, store);
             } else {
                 options.configureRuntime();
-                status =
-                        switch (options.command) {
-                            case "speak" -> Speak.run(options, io, store);
-                            case "transcribe" -> Transcribe.run(options, io, store);
-                            case "server" -> Server.run(options, io, store);
-                            case "chat", "instruct" -> runText(options, io, store);
-                            default -> throw new AssertionError(options.command);
-                        };
+                // the recording brackets the whole command, model load included; a null --jfr
+                // is a no-op closeable
+                try (Flight flight = Flight.start(options.jfr, io.err())) {
+                    status =
+                            switch (options.command) {
+                                case "speak" -> Speak.run(options, io, store);
+                                case "transcribe" -> Transcribe.run(options, io, store);
+                                case "server" -> Server.run(options, io, store);
+                                case "chat", "instruct" -> runText(options, io, store);
+                                default -> throw new AssertionError(options.command);
+                            };
+                }
             }
             if (status == 0 && io.out().checkError())
                 throw new IOException("cannot write to stdout");

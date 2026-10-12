@@ -138,6 +138,26 @@ release-deploy: ## Stage for Central what it does not hold yet: PROJECT=. for ev
 jam-natives: ## Build, stage and stamp every shipped libjam (linux/windows x86-64 here, darwin-aarch64 on JAM_MAC=user@mac over ssh)
 	jam/jam-native/scripts/natives.sh build
 
+##@ Profiling (JFR)
+
+# The recording every jfr-* target writes or reads; FILE=path overrides it.
+FILE ?= jinfer.jfr
+JAVA ?= java
+
+jfr-run: ## Record one greedy jinfer instruct run to FILE (MODEL=ref or path; make -C jinfer jfr-run)
+	$(MAKE) -C jinfer jfr-run FILE=$(abspath $(FILE))
+
+jfr-summary: ## jfr summary plus every jinfer.* event of FILE, as the JDK's jfr tool prints them
+	$(MAKE) -C jinfer jfr-summary FILE=$(abspath $(FILE))
+
+jfr-metrics: ## One table from FILE: prefill/decode t/s, decode p50/p95, load, tokenizer, GC, allocation, CPU
+	$(MAVEN) $(MAVEN_FLAGS) -q -pl jinfer/jinfer-bench -am package -DskipTests
+	$(JAVA) -cp jinfer/jinfer-bench/target/jinfer-bench.jar com.qxotic.jinfer.bench.JfrMetrics $(FILE)
+
+jfr-jmh: ## The json JMH suite under JMH's own JFR profiler (-prof jfr; one recording per fork, JMH_ARGS=... narrows)
+	$(MAVEN) $(MAVEN_FLAGS) -q -pl json/benchmarks -am package -DskipTests
+	$(JAVA) -jar json/benchmarks/target/json-benchmarks.jar -prof jfr $(JMH_ARGS)
+
 ##@ Miscellaneous
 
 examples: ## Build the demo apps (already in the default reactor; this target just limits the build to them)
@@ -152,4 +172,5 @@ help: ## Show this help
 	@echo '  Subtrees: make -C jinfer help (run, test-golden, ...) | make -C jota help | make -C jinfer/jinfer-tts native'
 
 .PHONY: default help package compile install jar jinfer-jar test jinfer-test jota-test \
-	jam-test native format clean jinfer-clean jota-clean examples release-canary jam-natives toknroll-fixtures test-fixtures ci ci-format ci-test ci-corpus ci-release release-plan release-deploy
+	jam-test native format clean jinfer-clean jota-clean examples release-canary jam-natives toknroll-fixtures test-fixtures ci ci-format ci-test ci-corpus ci-release release-plan release-deploy \
+	jfr-run jfr-summary jfr-metrics jfr-jmh
