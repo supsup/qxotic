@@ -1,0 +1,85 @@
+# Dockerfile.linux-bench - a Linux aarch64 image able to BUILD and RUN the qxotic bench, including
+# jam-native (cmake + a C11 compiler + the JDK's JNI headers).
+#
+# Nothing of ours is baked in: no source and no model. run-container.sh bind-mounts the worktree
+# read-only, copies it to a container-local directory, and reads the model from a named volume.
+#
+# Build, from this directory (the Dockerfile copies nothing from the build context):
+#
+#   docker build --platform linux/arm64 -f Dockerfile.linux-bench \
+#       -t qxotic-bench:temurin .
+#
+#   docker build --platform linux/arm64 -f Dockerfile.linux-bench \
+#       --build-arg BASE_IMAGE=ghcr.io/graalvm/jdk-community:25 \
+#       -t qxotic-bench:graalce .
+#
+# BASE_IMAGE values:
+#   eclipse-temurin:25-jdk             the default. HotSpot with C2, Ubuntu base (apt).
+#   ghcr.io/graalvm/jdk-community:25   GraalVM CE, Graal JIT by default, Oracle Linux base (microdnf).
+#                                      TAG TO CONFIRM AT BUILD TIME: the repository is the official
+#                                      GraalVM CE one, but the "25" tag was not checked against the
+#                                      registry when this was written, and whatever it resolves to
+#                                      is NOT guaranteed to be the 25.4.4.1 that sdkman installed on
+#                                      the host. Read the `# jvm` line of the result file; if the
+#                                      versions differ, say so next to the number.
+#   amazoncorretto:25                  optional, to match the host's Corretto. TAG TO CONFIRM AT
+#                                      BUILD TIME, same caveat (Amazon Linux base, dnf/yum).
+#
+# No digest is pinned, deliberately: none was verified. Pin one after the first successful build
+# (docker image inspect --format '{{index .RepoDigests 0}}' <base>) and record it in matrix.md.
+#
+# The image build needs network access (the base image, the distribution packages, Maven).
+# The Maven build of qxotic inside the container needs Maven Central as well; see run-container.sh.
+
+ARG BASE_IMAGE=eclipse-temurin:25-jdk
+FROM ${BASE_IMAGE}
+
+# The reactor's enforcer wants Maven 3.9 or newer. Maven comes from the Apache archive rather
+# than the distribution, because a distribution's maven package drags in its own JDK and can
+# change which java is first on PATH; the JDK under test must be the base image's and only that.
+ARG MAVEN_VERSION=3.9.9
+
+# cmake, a C/C++ toolchain, make and git for jam-native; curl/tar/gzip for the Maven tarball.
+# One block for the three package managers the documented base images use.
+RUN set -eu; \
+    if command -v apt-get >/dev/null 2>&1; then \
+        apt-get update; \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates curl tar gzip cmake gcc g++ make git; \
+        rm -rf /var/lib/apt/lists/*; \
+    elif command -v microdnf >/dev/null 2>&1; then \
+        microdnf install -y cmake gcc gcc-c++ make git tar gzip findutils; \
+        microdnf clean all; \
+    elif command -v dnf >/dev/null 2>&1; then \
+        dnf install -y cmake gcc gcc-c++ make git tar gzip findutils; \
+        dnf clean all; \
+    elif command -v yum >/dev/null 2>&1; then \
+        yum install -y cmake gcc gcc-c++ make git tar gzip findutils; \
+        yum clean all; \
+    else \
+        echo "no known package manager in this base image" >&2; exit 1; \
+    fi
+
+RUN set -eu; \
+    base="https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries"; \
+    tgz="apache-maven-${MAVEN_VERSION}-bin.tar.gz"; \
+    cd /tmp; \
+    curl -fsSLO "${base}/${tgz}"; \
+    curl -fsSLO "${base}/${tgz}.sha512"; \
+    echo "$(cut -d' ' -f1 "${tgz}.sha512")  ${tgz}" | sha512sum -c -; \
+    mkdir -p /opt/maven; \
+    tar -xzf "${tgz}" -C /opt/maven --strip-components=1; \
+    rm -f "${tgz}" "${tgz}.sha512"
+
+ENV MAVEN_HOME=/opt/maven
+ENV PATH=/opt/maven/bin:${PATH}
+
+# Fail the image build, not the first benchmark, if the toolchain is incomplete. JAVA_HOME must be
+# set by the base image: cmake's find_package(JNI) and Maven both read it.
+RUN set -eu; \
+    test -n "${JAVA_HOME:-}"; \
+    test -f "${JAVA_HOME}/include/jni.h"; \
+    java -version; mvn -version; cmake --version; cc --version; make --version; git --version
+
+WORKDIR /build
+CMD ["bash"]
