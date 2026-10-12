@@ -1,0 +1,29 @@
+# branch fixpoint/issue-6-7-kernels 17ba4702c (AFTER) against upstream c7924d5d1 (BEFORE); NormPeak from jinfer-bench.jar; Corretto 25.0.2; Apple M5 Max; 2026-10-12 16:38Z
+=== AFTER (four accumulators)
+vectorBits=128  vectorJit=slow
+kernel           size      ns/call   lanes/ns
+rmsnorm          1024        117.0       8.75
+sumOfSquares     1024         39.9      25.68
+rmsnorm          1027        123.9       8.29
+sumOfSquares     1027         43.1      23.83
+rmsnorm          2048        238.0       8.61
+sumOfSquares     2048         86.1      23.78
+rmsnorm          4096        494.1       8.29
+sumOfSquares     4096        210.6      19.45
+rmsnorm          4099        471.4       8.69
+sumOfSquares     4099        191.5      21.41
+rmsnorm          8192        968.0       8.46
+sumOfSquares     8192        418.1      19.59
+=== BEFORE (upstream single accumulator)
+vectorBits=128  vectorJit=slow
+kernel           size      ns/call   lanes/ns
+rmsnorm          1024        252.6       4.05
+sumOfSquares     1024        104.4       9.81
+rmsnorm          1027        260.7       3.94
+sumOfSquares     1027        108.2       9.49
+rmsnorm          2048        501.2       4.09
+sumOfSquares     2048        243.7       8.40
+rmsnorm          4096        968.9       4.23
+sumOfSquares     4096        639.6       6.40
+16:39:34Z
+

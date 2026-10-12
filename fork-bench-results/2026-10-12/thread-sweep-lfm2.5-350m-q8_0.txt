@@ -1,0 +1,9 @@
+# branch fixpoint/bench-thread-sweep f6ab768fb; java -jar bin/jinfer-bench.jar -m LFM2.5-350M-Q8_0.gguf --threads-sweep 1,2,4,8; Corretto 25.0.2; Apple M5 Max; 2026-10-12 17:22Z
+jinfer-bench 0.3.1 | runtime: C2 (Vector API kernels de-intrinsified) | jam: vector, scalar | threads: 1,2,4,8 (sweep)
+| model            | threads |           pp t/s |           tg t/s | tg speedup | pp speedup |
+| ---------------- | ------: | ---------------: | ---------------: | ---------: | ---------: |
+| LFM2.5-350M-Q8_0 |       1 |    126.04 ± 3.69 |     12.65 ± 0.60 |      1.00x |      1.00x |
+| LFM2.5-350M-Q8_0 |       2 |    229.85 ± 5.72 |     23.58 ± 0.53 |      1.86x |      1.82x |
+| LFM2.5-350M-Q8_0 |       4 |    404.12 ± 6.76 |     40.52 ± 0.42 |      3.20x |      3.21x |
+| LFM2.5-350M-Q8_0 |       8 |   679.42 ± 25.07 |     67.96 ± 1.26 |      5.37x |      5.39x |
+plateau: tg within 5% of max from 8 threads
