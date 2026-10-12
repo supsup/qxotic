@@ -36,10 +36,48 @@ public final class Norms {
         Raw w = Raw.f32(weight, "weight");
         if (USE_VECTOR_API) {
             var species = F_SPECIES;
+            int lanes = species.length(), unroll = 4 * lanes;
             int upperBound = species.loopBound(size);
-            FloatVector acc = FloatVector.zero(species);
+            // Four accumulators, not one: acc = x.fma(x, acc) makes every vector of the row wait
+            // for the previous one, so a single chain runs at FMA latency and leaves the FMA
+            // units mostly idle. Four independent chains over blocks of 4 * lanes keep them fed;
+            // the partial sums fold once at the end. The summation tree changes, so ss can differ
+            // from a serial sum in its last bits (NormsContractTest bounds that); NormPeak in
+            // jinfer-bench measures the gain.
+            FloatVector acc0 = FloatVector.zero(species), acc1 = acc0, acc2 = acc0, acc3 = acc0;
             int i = 0;
-            for (; i < upperBound; i += species.length()) {
+            for (; i + unroll <= size; i += unroll) {
+                var x0 =
+                        FloatVector.fromMemorySegment(
+                                species,
+                                xv.vseg(),
+                                xv.vbase() + (xOffset + i) * Float.BYTES,
+                                ByteOrder.LITTLE_ENDIAN);
+                var x1 =
+                        FloatVector.fromMemorySegment(
+                                species,
+                                xv.vseg(),
+                                xv.vbase() + (xOffset + i + lanes) * Float.BYTES,
+                                ByteOrder.LITTLE_ENDIAN);
+                var x2 =
+                        FloatVector.fromMemorySegment(
+                                species,
+                                xv.vseg(),
+                                xv.vbase() + (xOffset + i + 2 * lanes) * Float.BYTES,
+                                ByteOrder.LITTLE_ENDIAN);
+                var x3 =
+                        FloatVector.fromMemorySegment(
+                                species,
+                                xv.vseg(),
+                                xv.vbase() + (xOffset + i + 3 * lanes) * Float.BYTES,
+                                ByteOrder.LITTLE_ENDIAN);
+                acc0 = x0.fma(x0, acc0);
+                acc1 = x1.fma(x1, acc1);
+                acc2 = x2.fma(x2, acc2);
+                acc3 = x3.fma(x3, acc3);
+            }
+            FloatVector acc = acc0.add(acc1).add(acc2.add(acc3));
+            for (; i < upperBound; i += lanes) {
                 var xvv =
                         FloatVector.fromMemorySegment(
                                 species,
@@ -218,10 +256,44 @@ public final class Norms {
         Raw xv = Raw.f32(x, "x");
         if (USE_VECTOR_API) {
             var species = F_SPECIES;
+            int lanes = species.length(), unroll = 4 * lanes;
             int upperBound = species.loopBound(size);
-            FloatVector acc = FloatVector.zero(species);
+            // Four independent FMA chains, the rmsnorm reduction's reason: one chain runs at FMA
+            // latency. Same block, remainder and tail structure as there.
+            FloatVector acc0 = FloatVector.zero(species), acc1 = acc0, acc2 = acc0, acc3 = acc0;
             int i = 0;
-            for (; i < upperBound; i += species.length()) {
+            for (; i + unroll <= size; i += unroll) {
+                var x0 =
+                        FloatVector.fromMemorySegment(
+                                species,
+                                xv.vseg(),
+                                xv.vbase() + (xOffset + i) * Float.BYTES,
+                                ByteOrder.LITTLE_ENDIAN);
+                var x1 =
+                        FloatVector.fromMemorySegment(
+                                species,
+                                xv.vseg(),
+                                xv.vbase() + (xOffset + i + lanes) * Float.BYTES,
+                                ByteOrder.LITTLE_ENDIAN);
+                var x2 =
+                        FloatVector.fromMemorySegment(
+                                species,
+                                xv.vseg(),
+                                xv.vbase() + (xOffset + i + 2 * lanes) * Float.BYTES,
+                                ByteOrder.LITTLE_ENDIAN);
+                var x3 =
+                        FloatVector.fromMemorySegment(
+                                species,
+                                xv.vseg(),
+                                xv.vbase() + (xOffset + i + 3 * lanes) * Float.BYTES,
+                                ByteOrder.LITTLE_ENDIAN);
+                acc0 = x0.fma(x0, acc0);
+                acc1 = x1.fma(x1, acc1);
+                acc2 = x2.fma(x2, acc2);
+                acc3 = x3.fma(x3, acc3);
+            }
+            FloatVector acc = acc0.add(acc1).add(acc2.add(acc3));
+            for (; i < upperBound; i += lanes) {
                 var xvv =
                         FloatVector.fromMemorySegment(
                                 species,

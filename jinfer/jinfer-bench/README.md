@@ -236,6 +236,8 @@ Loops over engine kernels without a model; run them with the same `-cp` as `Embe
   With a shape census from `-Djinfer.convProfile=true` on a real synthesis, it measures the shapes that model ran, weighted by FLOPs.
   The tile shape is a constant, so one process measures one shape; run it once per `-Djinfer.convTile=auto|4x2|4x4`.
 - `ConvParity`: checks whether the tile shape changes the output; run it once per `-Djinfer.convTile` value and `diff` the outputs.
+- `NormPeak [size ...]`: `Norms.rmsnorm` and `Norms.sumOfSquares` over one cache-resident row, nanoseconds per call and lanes per nanosecond.
+  The default ladder is 1024, 1027, 2048, 4096, 4099 and 8192 lanes; the odd sizes exercise the ragged tail.
 
 Model-level probes are tagged JUnit benches in the model modules: `MtpBench` (jinfer-gemma4); `PrefillBench`, `ScoringBench`, `GrammarCostProbe`, `NmtProbe` (jinfer-langchain4j).
 Run them by name: `mvn -pl jinfer/jinfer-gemma4 test -Dtest=MtpBench -Dsurefire.excludedGroups=`.

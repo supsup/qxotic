@@ -9,10 +9,88 @@ import com.qxotic.jota.DataType;
 import com.qxotic.jota.Shape;
 import com.qxotic.jota.memory.MemoryAllocators;
 import java.lang.foreign.Arena;
+import java.util.Random;
 import org.junit.jupiter.api.Test;
 
 /** Formula and boundary contracts independent of the retired FloatTensor implementation. */
 class NormsContractTest {
+
+    /**
+     * Sizes below one accumulator block of {@code 4 * lanes} at every lane width (4, 8 and 16),
+     * exact blocks, and ragged remainders that leave single vectors and a scalar tail; 4096 and
+     * 4099 are a hidden width and its odd neighbour.
+     */
+    private static final int[] SIZES = {
+        1, 3, 7, 15, 16, 17, 33, 63, 64, 65, 127, 129, 1027, 4096, 4099
+    };
+
+    /**
+     * Relative bound on a float sum of {@code size} non-negative terms against its exact value:
+     * every term is rounded once when squared and once when added, each rounding within {@code
+     * 2^-24} of a partial sum no larger than the total, so the error is under {@code 2 * size *
+     * 2^-24} whatever the summation tree (a serial chain, or the vector path's four accumulators
+     * and lane reduction). The floor is the kernels' usual {@link Oracles#REL_TOL}, which covers
+     * the few extra roundings of the final fold at sizes where the derived bound is tighter.
+     */
+    private static double sumTolerance(int size) {
+        return Math.max(Oracles.REL_TOL, 2.0 * size * 0x1p-24);
+    }
+
+    private static float[] random(int count, long seed) {
+        Random random = new Random(seed);
+        float[] values = new float[count];
+        for (int i = 0; i < count; i++) values[i] = random.nextFloat() * 4 - 2;
+        return values;
+    }
+
+    @Test
+    void sumOfSquaresMatchesADoubleSumAcrossBlockBoundaries() {
+        try (Arena arena = Arena.ofConfined()) {
+            var memory = MemoryAllocators.ofArena(arena);
+            for (int size : SIZES) {
+                float[] values = random(size + 2, size);
+                var x = Views.fromFloatArray(memory, values);
+
+                float actual = Norms.sumOfSquares(x, 2, size);
+
+                double expected = 0;
+                for (int i = 0; i < size; i++) expected += (double) values[i + 2] * values[i + 2];
+                assertEquals(expected, actual, expected * sumTolerance(size), "size " + size);
+            }
+        }
+    }
+
+    @Test
+    void rmsNormMatchesItsDefinitionAcrossBlockBoundaries() {
+        try (Arena arena = Arena.ofConfined()) {
+            var memory = MemoryAllocators.ofArena(arena);
+            for (int size : SIZES) {
+                float[] values = random(size + 2, size);
+                float[] weights = random(size, size + 1);
+                var x = Views.fromFloatArray(memory, values);
+                var weight = Views.fromFloatArray(memory, weights);
+                var out = Views.allocateF32(memory, size + 1);
+
+                Norms.rmsnorm(out, 1, x, 2, weight, size, 1e-5f);
+
+                double squares = 0;
+                for (int i = 0; i < size; i++) squares += (double) values[i + 2] * values[i + 2];
+                float scale = (float) (1 / Math.sqrt(squares / size + 1e-5));
+                float[] actual = Views.toFloatArray(out, "out");
+                // The scale carries half the sum's relative error through the square root; the
+                // two products add a rounding each, inside the floor.
+                double tolerance = sumTolerance(size);
+                for (int i = 0; i < size; i++) {
+                    double expected = values[i + 2] * weights[i] * scale;
+                    assertEquals(
+                            expected,
+                            actual[i + 1],
+                            Math.max(Oracles.ABS_TOL, Math.abs(expected) * tolerance),
+                            "size " + size + " lane " + i);
+                }
+            }
+        }
+    }
 
     @Test
     void rmsNormMatchesItsDefinitionAcrossTheVectorTail() {
