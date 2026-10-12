@@ -43,6 +43,17 @@ run: jar ## Build, then launch the CLI: make run ARGS="chat --model hf.co/..."
 run-jar-command: ## Print the full java invocation for running the jar by hand
 	@echo $(JAVA) $(JAVA_RUNTIME_OPTIONS) -jar $(JAR_FILE)
 
+# The examples live in the opt-in `examples` profile. Built from the ROOT reactor (-am pulls the
+# sibling trees), then launched through the module's exec plugin, which carries the JVM flags.
+# jam-native rides in through jam-vector's test scope and needs CMake; skip it, the demo runs on
+# jam-vector. SQLUDF_MODEL=ref swaps the chat GGUF, SQLUDF_SHUFFLE=true turns on label shuffling.
+SQLUDF = -Pexamples -pl jinfer/jinfer-example-sql-udf
+example-sql-udf: ## Build, then run the SQL UDF demo: H2 calls the model in-process (SQLUDF_MODEL=ref, SQLUDF_SHUFFLE=true)
+	cd $(ROOT) && $(MAVEN) $(MAVEN_FLAGS) -q $(SQLUDF) -am install -DskipTests -Djam.native.skip=true
+	cd $(ROOT) && $(MAVEN) $(MAVEN_FLAGS) -q $(SQLUDF) exec:exec \
+		$(if $(SQLUDF_MODEL),-Djinfer.sqludf.model=$(SQLUDF_MODEL)) \
+		$(if $(SQLUDF_SHUFFLE),-Djinfer.sqludf.shuffleLabels=$(SQLUDF_SHUFFLE))
+
 # Two identical greedy runs off the jar must be byte-identical. MODEL is a reference, resolved as
 # `jinfer pull` resolves it (the local store or the HuggingFace hub cache serve it offline, else it
 # is downloaded), or a path to a GGUF.
@@ -60,4 +71,4 @@ help: ## Show this help
 		NF >= 2 && $$1 ~ /^[a-zA-Z_-]+:/ { t = $$1; sub(/:.*/, "", t); \
 			printf "  \033[36m%-16s\033[0m %s\n", t, $$2 }' $(MAKEFILE_LIST)
 
-.PHONY: default help jar test native clean run run-jar-command test-golden
+.PHONY: default help jar test native clean run run-jar-command example-sql-udf test-golden

@@ -1,0 +1,51 @@
+id,body
+1,The app crashes every time I open the settings page on my phone. It worked fine last week.
+2,Could you add a dark mode? The white background is hard on the eyes at night.
+3,How do I export my data as a CSV file? I cannot find the option anywhere.
+4,I was charged twice for my subscription this month. Please refund the second charge.
+5,Uploading a photo larger than 5 MB fails with an error that just says Oops.
+6,It would be great if invoices could be sent automatically at the end of each month.
+7,I cancelled my plan yesterday but was still billed today. I want my money back.
+8,What is the difference between the Pro and the Team plan?
+9,The search box returns no results when the query contains an apostrophe.
+10,Please add two-factor authentication. Our security policy requires it.
+11,Is there a limit on how many projects I can create on the free plan?
+12,After the latest update the sync icon spins forever and nothing is saved.
+13,A keyboard shortcut for creating a new note would save me a lot of clicks.
+14,Can I change the email address on my account without creating a new one?
+15,Notifications arrive hours late on Android. On the web they are instant.
+16,I would like to be able to tag tasks with colors instead of only labels.
+17,Where can I find the API documentation for the webhooks feature?
+18,The PDF export cuts off the last line of every page.
+19,Please let me pin a conversation to the top of the list.
+20,The order I placed last Monday never arrived. I would like a refund for it.
+21,Does the mobile app work offline or does it need a connection all the time?
+22,Logging in with Google fails with a redirect loop since this morning.
+23,Support for importing from Trello would make switching much easier.
+24,How do I delete my account and all of my data permanently?
+25,The calendar shows events one hour off after the daylight saving change.
+26,Please add an option to sort the task list by due date.
+27,Can several people edit the same document at the same time?
+28,The total on the invoice does not match the sum of the line items.
+29,A weekly summary email of completed tasks would be a nice touch.
+30,I was billed for the annual plan but only wanted the monthly one. Please reverse the charge.
+31,Which browsers are officially supported?
+32,Pasting text from Word inserts strange characters into the editor.
+33,It would help to have a read-only link I can share with clients.
+34,Is my data stored in the EU or in the US?
+35,The mobile app logs me out every few minutes for no reason.
+36,Please support markdown tables in comments.
+37,How long are deleted items kept in the trash before they are gone for good?
+38,Attachments disappear from a ticket after I edit its title.
+39,Could the dashboard show a chart of tickets closed per week?
+40,I upgraded by mistake and have not used any of the new features. Can I get a refund?
+41,The timer keeps running after I click stop and the hours logged are wrong.
+42,An integration with Slack for new comments would be really useful.
+43,Do you offer discounts for schools or non-profit organizations?
+44,The page freezes when a table has more than a thousand rows.
+45,Please add the ability to duplicate a project with all of its tasks.
+46,Can I pay by bank transfer instead of credit card?
+47,Emoji in task titles show up as empty boxes in the exported report.
+48,A bulk edit feature for changing the assignee of many tasks at once would be great.
+49,What happens to shared documents when the owner leaves the team?
+50,The refund you promised last week has still not shown up on my statement.
