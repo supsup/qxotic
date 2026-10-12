@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import jdk.jfr.Enabled;
 import jdk.jfr.Event;
 import jdk.jfr.EventType;
 import jdk.jfr.ValueDescriptor;
@@ -29,6 +30,8 @@ class EventSchemaTest {
                         "jinfer.ModelLoad",
                         "jinfer.Runtime",
                         "jinfer.PromptCache",
+                        "jinfer.PromptCacheLookup",
+                        "jinfer.PromptCacheStore",
                         "jinfer.MediaCache",
                         "jinfer.MediaProjection",
                         "jinfer.Speculation",
@@ -120,6 +123,32 @@ class EventSchemaTest {
     }
 
     @Test
+    void promptCacheRequestEventsAreStable() {
+        // per request and per write, next to the sampled gauge; both on by default
+        assertEvent(
+                PromptCacheLookupEvent.class,
+                "jinfer.PromptCacheLookup",
+                List.of("jinfer", "Memory"),
+                Set.of(
+                        "requestedTokens",
+                        "matchedPrefixTokens",
+                        "tier",
+                        "resumedFromDisk",
+                        "treeNodes"));
+        assertEvent(
+                PromptCacheStoreEvent.class,
+                "jinfer.PromptCacheStore",
+                List.of("jinfer", "Memory"),
+                Set.of("operation", "file", "blocks", "fileBytes"));
+        // on by default (isEnabled() would report a live recording's setting, not the default)
+        for (Class<? extends Event> event :
+                List.of(PromptCacheLookupEvent.class, PromptCacheStoreEvent.class)) {
+            Enabled enabled = EventType.getEventType(event).getAnnotation(Enabled.class);
+            assertTrue(enabled == null || enabled.value(), event.getSimpleName() + " defaults on");
+        }
+    }
+
+    @Test
     void mediaProjectionEventIsStable() {
         assertEvent(
                 MediaProjectionEvent.class,
@@ -146,6 +175,8 @@ class EventSchemaTest {
                         SpeculationEvent.class,
                         DecodeEvent.class,
                         PromptCacheEvent.class,
+                        PromptCacheLookupEvent.class,
+                        PromptCacheStoreEvent.class,
                         MediaCacheEvent.class,
                         MediaProjectionEvent.class)) {
             EventType type = EventType.getEventType(event);

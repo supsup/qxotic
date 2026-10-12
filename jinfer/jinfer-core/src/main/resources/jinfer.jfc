@@ -29,6 +29,16 @@
     <setting name="period">1 s</setting>
   </event>
 
+  <event name="jinfer.PromptCacheLookup">
+    <setting name="enabled">true</setting>
+    <setting name="threshold">0 ms</setting>
+  </event>
+
+  <event name="jinfer.PromptCacheStore">
+    <setting name="enabled">true</setting>
+    <setting name="threshold">0 ms</setting>
+  </event>
+
   <event name="jinfer.MediaCache">
     <setting name="enabled">true</setting>
     <setting name="period">1 s</setting>

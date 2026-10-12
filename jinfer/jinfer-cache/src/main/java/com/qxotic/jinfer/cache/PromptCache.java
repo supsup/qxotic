@@ -6,6 +6,8 @@ import com.qxotic.jinfer.ContentKey;
 import com.qxotic.jinfer.ContextState;
 import com.qxotic.jinfer.LanguageModel;
 import com.qxotic.jinfer.telemetry.PerformanceCliff;
+import com.qxotic.jinfer.telemetry.PromptCacheLookupEvent;
+import com.qxotic.jinfer.telemetry.PromptCacheStoreEvent;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -15,6 +17,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -393,6 +396,7 @@ public final class PromptCache<S extends ContextState> implements AutoCloseable 
     public <R> R serve(List<Batch> prompt, Pass<S, R> pass, BooleanSupplier prefillInterrupt) {
         checkOpen();
         long promptStarted = System.nanoTime();
+        PromptCacheLookupEvent lookup = lookupEvent(); // null unless JFR wants it
         long[] fingerprints = CachedSession.fingerprints(prompt);
         if (fingerprints.length == 0) {
             throw new IllegalArgumentException("empty prompt: nothing to serve");
@@ -409,6 +413,8 @@ public final class PromptCache<S extends ContextState> implements AutoCloseable 
         CachedSession<S> session = sessionHit != null ? sessionHit : attach(fingerprints);
         int restored = session.position();
         Tier tier = sessionHit != null ? Tier.SESSION : restored > 0 ? Tier.BLOCKS : Tier.FRESH;
+        // the lookup ends here: the source is chosen and restored, nothing is prefilled yet
+        if (lookup != null) commitLookup(lookup, fingerprints.length, restored, tier);
         // one group per batch: the codec's turn boundaries ARE the block boundaries, so a
         // follow-up diverging after turn k still reuses turns 0..k-1
         List<List<Batch>> groups = new ArrayList<>(prompt.size());
@@ -626,8 +632,11 @@ public final class PromptCache<S extends ContextState> implements AutoCloseable 
     public void save() {
         checkOpen();
         if (tree == null || writeBack == null) return;
+        PromptCacheStoreEvent store = storeEvent(); // null unless JFR wants it
+        int fresh = tree.freshBlockCount();
         try {
             tree.appendTo(writeBack);
+            if (store != null) commitStore(store, PromptCacheStoreEvent.SAVE, writeBack, fresh);
         } catch (IOException e) {
             throw new UncheckedIOException("failed to save cache to " + writeBack, e);
         }
@@ -639,11 +648,67 @@ public final class PromptCache<S extends ContextState> implements AutoCloseable 
      */
     public void export(Path out) {
         checkOpen();
+        BlockTree<S> t = requireTree();
+        PromptCacheStoreEvent store = storeEvent(); // null unless JFR wants it
         try {
-            requireTree().freeze(out);
+            t.freeze(out);
+            if (store != null) {
+                commitStore(store, PromptCacheStoreEvent.EXPORT, out, t.sample().blocks());
+            }
         } catch (IOException e) {
             throw new UncheckedIOException("failed to export cache to " + out, e);
         }
+    }
+
+    // ---- JFR: one event per lookup and per store ---------------------------------------------
+    // The event object is allocated BEFORE isEnabled() can be asked - that is the JDK's idiom
+    // (jdk.jfr.Event is the switch) - so the off cost is one short-lived allocation plus a field
+    // check, per request and per save, never per token.
+
+    /** A begun lookup event, or null when the event is disabled. */
+    private static PromptCacheLookupEvent lookupEvent() {
+        PromptCacheLookupEvent event = new PromptCacheLookupEvent();
+        if (!event.isEnabled()) return null;
+        event.begin();
+        return event;
+    }
+
+    private void commitLookup(
+            PromptCacheLookupEvent lookup, int requested, int restored, Tier tier) {
+        lookup.end();
+        if (!lookup.shouldCommit()) return;
+        lookup.requestedTokens = requested;
+        lookup.matchedPrefixTokens = restored;
+        lookup.tier = tier.name().toLowerCase(Locale.ROOT);
+        lookup.resumedFromDisk = tier == Tier.BLOCKS && tree != null && tree.lastResumeFromDisk();
+        lookup.treeNodes = tree == null ? 0 : tree.sample().blocks();
+        lookup.commit();
+    }
+
+    /** A begun store event, or null when the event is disabled. */
+    private static PromptCacheStoreEvent storeEvent() {
+        PromptCacheStoreEvent event = new PromptCacheStoreEvent();
+        if (!event.isEnabled()) return null;
+        event.begin();
+        return event;
+    }
+
+    private static void commitStore(
+            PromptCacheStoreEvent store, String operation, Path file, int blocks) {
+        store.end();
+        if (!store.shouldCommit()) return;
+        store.operation = operation;
+        store.file = file.toString();
+        store.blocks = blocks;
+        try {
+            store.fileBytes = Files.size(file);
+        } catch (IOException e) {
+            // the write itself succeeded; a size the event cannot read is its own failure
+            throw new UncheckedIOException(
+                    "cache " + operation + " to " + file + " succeeded but its size is unreadable",
+                    e);
+        }
+        store.commit();
     }
 
     /** Whether the block layer exists (codec present and not disabled). */

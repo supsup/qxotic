@@ -84,6 +84,7 @@ public final class BlockTree<S extends ContextState> {
     private ByteBuffer scratch = ByteBuffer.allocate(4096).order(ByteOrder.LITTLE_ENDIAN);
     private long clock;
     private long hits, misses, evictions, discards, refusals;
+    private boolean lastResumeFromDisk; // the last resume's chain touched a frozen block
 
     /**
      * A writable cache layered over a read-only {@link FrozenBlocks} base: the artifact's blocks
@@ -172,10 +173,12 @@ public final class BlockTree<S extends ContextState> {
             }
             if (tip == sentinel) {
                 misses++;
+                lastResumeFromDisk = false;
                 return tip;
             }
             for (Block b = tip; b != sentinel; b = b.parent) chainScratch.add(b);
             boolean corrupt = false;
+            boolean fromDisk = false;
             try {
                 for (int i = chainScratch.size() - 1; i >= 0; i--) {
                     Block b = chainScratch.get(i);
@@ -185,6 +188,7 @@ public final class BlockTree<S extends ContextState> {
                         break;
                     }
                     codec.restore(state, b.from, b.to, b.mem);
+                    if (b.frozen) fromDisk = true;
                 }
             } finally {
                 // a throwing restore must not leave this chain for the next resume to replay
@@ -192,6 +196,7 @@ public final class BlockTree<S extends ContextState> {
             }
             if (corrupt) continue; // the tree changed: re-match from scratch
             hits++;
+            lastResumeFromDisk = fromDisk;
             state.resumeAt(tip.to);
             return tip;
         }
@@ -410,6 +415,19 @@ public final class BlockTree<S extends ContextState> {
         }
         base.append(fresh);
         freshBlocks.clear();
+    }
+
+    /**
+     * Whether the most recent {@link #resume} restored at least one block grafted from the mounted
+     * artifact - telemetry's "served from disk" signal. False after a miss.
+     */
+    boolean lastResumeFromDisk() {
+        return lastResumeFromDisk;
+    }
+
+    /** Blocks committed since the last append - what the next {@link #appendTo} will offer. */
+    int freshBlockCount() {
+        return freshBlocks.size();
     }
 
     /** A cache health reading: sizes now, counters cumulative since construction. */
