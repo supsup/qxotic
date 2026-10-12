@@ -204,8 +204,8 @@ public final class JfrMetrics {
 
         /**
          * Bytes allocated over the recording, with where the number came from. A thread's
-         * cumulative counter contributes only when it was read at least twice: a single reading
-         * has first == last, and that zero is the absence of a delta, not a measurement of one.
+         * cumulative counter contributes only when it was read at least twice: a single reading has
+         * first == last, and that zero is the absence of a delta, not a measurement of one.
          */
         Allocation allocation() {
             long delta = 0;
