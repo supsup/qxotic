@@ -74,8 +74,12 @@ import java.util.stream.Collectors;
  * {@code --media <file>} and a vision port - projected-media cold versus warm latency. State
  * allocation time and peak RSS (VmHWM) are reported per model.
  *
+ * <p>{@code --threads-sweep 1,2,4,all} repeats the two parity tests at each count, one child
+ * process per count (the thread budget is fixed per process), and prints one table per model with
+ * speedups and the count from which decode stops scaling - see {@link ThreadSweep}.
+ *
  * <pre>jinfer-bench -m model.gguf [-m ...] [-p 512] [-n 128] [-d 0] [-r 5] [-w 2] [--ctx N]
- *                  [--media image.png]</pre>
+ *                  [--media image.png] [--threads-sweep 1,2,4,all]</pre>
  */
 public final class JinferBench {
 
@@ -92,9 +96,15 @@ public final class JinferBench {
         int p = 512, n = 128, depth = 0, reps = 5, warmup = 2, ctx = 0, threads = 0;
         boolean noWarmup = false, runCapabilities = true;
         Path media = null;
+        String sweep = null;
+        int sweepAt = -1; // where --threads-sweep sits in args, so the children do not inherit it
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-m", "--model" -> models.add(args[++i]);
+                case "--threads-sweep" -> {
+                    sweepAt = i;
+                    sweep = args[++i];
+                }
                 case "--with" -> {
                     // CLI convention: --with media=<mmproj.gguf> attaches a companion
                     String[] kv = args[++i].split("=", 2);
@@ -131,6 +141,15 @@ public final class JinferBench {
             System.exit(2);
         }
         if (depth < 0) throw new IllegalArgumentException("n-depth must be >= 0");
+
+        if (sweep != null) {
+            if (threads > 0) {
+                System.err.println("-t and --threads-sweep exclude each other");
+                System.exit(2);
+            }
+            sweep(args, sweepAt, sweep);
+            return;
+        }
 
         // -t sets the engine's one thread budget (BEFORE RuntimeFlags initializes); without it
         // the run measures the engine's own default - one thread per physical core.
@@ -178,6 +197,29 @@ public final class JinferBench {
         }
         printTable(rows);
         printCaps(caps);
+    }
+
+    /**
+     * {@code --threads-sweep}: the pp/tg tests at every listed count, each in its own child
+     * process (the thread budget is fixed per process - see {@link ThreadSweep}), then one table
+     * per model with speedups and the decode plateau. {@code all} is the engine's default, which
+     * this process reports in its header the same way a single run does.
+     */
+    private static void sweep(String[] args, int sweepAt, String list) throws Exception {
+        int[] counts = ThreadSweep.parse(list, RuntimeFlags.THREADS);
+        List<String> childArgs = new ArrayList<>();
+        for (int i = 0; i < args.length; i++) {
+            if (i == sweepAt || i == sweepAt + 1) continue;
+            childArgs.add(args[i]);
+        }
+        System.out.println(header(ThreadSweep.label(counts) + " (sweep)"));
+        Map<String, List<ThreadSweep.Point>> byModel = ThreadSweep.run(childArgs, counts);
+        boolean first = true;
+        for (Map.Entry<String, List<ThreadSweep.Point>> e : byModel.entrySet()) {
+            if (!first) System.out.println();
+            first = false;
+            System.out.print(ThreadSweep.table(e.getKey(), e.getValue()));
+        }
     }
 
     /**
@@ -630,6 +672,12 @@ public final class JinferBench {
      * backends that loaded in the order the matmuls try them, and the thread budget.
      */
     static String header(boolean threadsRequested) {
+        return header(
+                RuntimeFlags.THREADS + (threadsRequested ? " (requested)" : " (engine default)"));
+    }
+
+    /** {@link #header(boolean)} with the thread budget spelled out, as a sweep lists its counts. */
+    static String header(String threads) {
         String version = JinferBench.class.getPackage().getImplementationVersion();
         String runtime =
                 System.getProperty("org.graalvm.nativeimage.imagecode") != null
@@ -640,12 +688,11 @@ public final class JinferBench {
         String jam =
                 JAM.providers().stream().map(JAM.Provider::id).collect(Collectors.joining(", "));
         return String.format(
-                "jinfer-bench %s | runtime: %s | jam: %s | threads: %d (%s)",
+                "jinfer-bench %s | runtime: %s | jam: %s | threads: %s",
                 version == null ? "dev" : version,
                 runtime,
                 jam.isEmpty() ? "none (pure-Java floor)" : jam,
-                RuntimeFlags.THREADS,
-                threadsRequested ? "requested" : "engine default");
+                threads);
     }
 
     private static void usage(PrintStream out) {
@@ -664,6 +711,11 @@ public final class JinferBench {
                       --no-capabilities   skip engine capability benchmarks
                   -t, --threads <N>       force pp and tg threads (default: engine defaults,
                                           P-cores only on Apple Silicon)
+                      --threads-sweep <list>
+                                          pp and tg at each count (comma-separated ints and
+                                          'all' = engine default), one child process per
+                                          count; one table per model with speedups and
+                                          the tg plateau. Excludes -t; skips capabilities
                       --ctx <N>           override context size for both tests
                                           (default per test, as llama-bench: p for pp, n for tg)
                       --media <path>      also benchmark projected-media cold vs warm latency
