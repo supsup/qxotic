@@ -51,8 +51,8 @@ public final class Llm {
      * The per-JVM engine, opened on the first call that needs it: registering the aliases must not
      * map weights. A failed open (offline, a bad reference) is remembered and rethrown with its
      * original message on every later call. A class-initialization holder would instead report it
-     * once as {@code ExceptionInInitializerError} and forever after as {@code
-     * NoClassDefFoundError} with the cause gone.
+     * once as {@code ExceptionInInitializerError} and forever after as {@code NoClassDefFoundError}
+     * with the cause gone.
      */
     private static synchronized LlmBackend engine() {
         if (engine != null) return engine;

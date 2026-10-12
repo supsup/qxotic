@@ -239,10 +239,10 @@ final class JinferBackend implements LlmBackend {
      * the model has no native chat-template codec (then the engine has no block layer and every row
      * would prefill the whole prompt - correct, just slower).
      *
-     * <p>{@code definePrompt(Conversation)} rather than the {@code definePrompt(Request)} the engine
-     * recommends: the Request form exists because the thinking floor can render a different prompt
-     * than the flag alone, and here thinking is pinned false on this define and on every request
-     * that follows, so both forms encode the same prefix.
+     * <p>{@code definePrompt(Conversation)} rather than the {@code definePrompt(Request)} the
+     * engine recommends: the Request form exists because the thinking floor can render a different
+     * prompt than the flag alone, and here thinking is pinned false on this define and on every
+     * request that follows, so both forms encode the same prefix.
      */
     private void definePrefix(ChatEngine chat, String instruction, Message system) {
         if (!chat.blockCaching() || !definedPrefixes.add(instruction)) return;
