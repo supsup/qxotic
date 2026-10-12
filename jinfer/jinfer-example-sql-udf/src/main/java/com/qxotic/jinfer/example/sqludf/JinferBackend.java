@@ -100,8 +100,7 @@ final class JinferBackend implements LlmBackend {
             Message system = Message.system(instruction);
             definePrefix(chat, instruction, system);
             ChatEngine.Request request =
-                    ChatEngine.Request.builder(
-                                    List.of(system, Message.user(text)), greedy(chat))
+                    ChatEngine.Request.builder(List.of(system, Message.user(text)), greedy(chat))
                             .thinking(false)
                             .maxOutputTokens(LABEL_TOKEN_BUDGET)
                             .grammar(labelGrammar(labels))
@@ -198,7 +197,8 @@ final class JinferBackend implements LlmBackend {
             try {
                 LoadedEmbedder<?> loaded = Models.loadEmbedder(embeddingModel, arena);
                 int capacity =
-                        Math.min(contextCapacity, loaded.model().configuration().maxContextLength());
+                        Math.min(
+                                contextCapacity, loaded.model().configuration().maxContextLength());
                 embeddingState = loaded.model().newState(capacity);
                 embedder = loaded;
                 embeddingArena = arena;
@@ -215,8 +215,8 @@ final class JinferBackend implements LlmBackend {
 
     /**
      * Pins the instruction turn into the block layer once per distinct instruction. Skipped when
-     * the model has no native chat-template codec (then the engine has no block layer and every
-     * row would prefill the whole prompt - correct, just slower).
+     * the model has no native chat-template codec (then the engine has no block layer and every row
+     * would prefill the whole prompt - correct, just slower).
      */
     private void definePrefix(ChatEngine chat, String instruction, Message system) {
         if (!chat.blockCaching() || !definedPrefixes.add(instruction)) return;

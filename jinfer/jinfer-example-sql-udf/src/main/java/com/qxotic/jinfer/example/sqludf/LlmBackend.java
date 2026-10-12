@@ -56,7 +56,11 @@ public interface LlmBackend extends AutoCloseable {
         }
 
         public Stats plus(
-                int promptTokens, int restoredTokens, int completionTokens, long prompt, long decode) {
+                int promptTokens,
+                int restoredTokens,
+                int completionTokens,
+                long prompt,
+                long decode) {
             return new Stats(
                     calls + 1,
                     this.promptTokens + promptTokens,

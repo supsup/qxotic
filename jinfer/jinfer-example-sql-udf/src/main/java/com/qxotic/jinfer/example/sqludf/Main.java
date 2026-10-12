@@ -18,10 +18,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The demo: an in-memory H2 database, the five aliases, fifty support tickets from the bundled
- * CSV, and three queries that call the model from SQL - classify with a GROUP BY, embed then
- * nearest neighbours by COSINE, judge in a WHERE clause. Each query prints its rows, its wall time
- * and what the engine spent (prompt tokens, how many the cache restored, pp/tg rates).
+ * The demo: an in-memory H2 database, the five aliases, fifty support tickets from the bundled CSV,
+ * and three queries that call the model from SQL - classify with a GROUP BY, embed then nearest
+ * neighbours by COSINE, judge in a WHERE clause. Each query prints its rows, its wall time and what
+ * the engine spent (prompt tokens, how many the cache restored, pp/tg rates).
  *
  * <p>Run: {@code make -C jinfer example-sql-udf}, or {@code mvn -Pexamples -pl
  * jinfer/jinfer-example-sql-udf exec:exec} after an install of the reactor.
@@ -30,6 +30,7 @@ public final class Main {
 
     static final String LABELS = "bug,feature,question";
     static final String QUESTION = "Is the customer asking for a refund?";
+
     /** The ticket whose nearest neighbours the embedding query finds. */
     static final int PROBE_ID = 7;
 
@@ -95,7 +96,8 @@ public final class Main {
                 update.executeUpdate(EMBED_ALL);
             }
             embed.report(out, "embed", rows);
-            out.printf(">>> nearest neighbours of #%d: %s%n", PROBE_ID, preview(body(db, PROBE_ID)));
+            out.printf(
+                    ">>> nearest neighbours of #%d: %s%n", PROBE_ID, preview(body(db, PROBE_ID)));
             List<Integer> nearest = new ArrayList<>();
             try (PreparedStatement query = db.prepareStatement(NEAREST)) {
                 query.setInt(1, PROBE_ID);
@@ -111,7 +113,8 @@ public final class Main {
             }
 
             // 3. judge in a WHERE clause: a boolean the planner can filter on
-            out.printf("%n>>> SELECT id, body FROM tickets WHERE LLM_JUDGE(body, '%s')%n", QUESTION);
+            out.printf(
+                    "%n>>> SELECT id, body FROM tickets WHERE LLM_JUDGE(body, '%s')%n", QUESTION);
             List<Integer> refunds = new ArrayList<>();
             Timing judge = Timing.start();
             try (PreparedStatement query = db.prepareStatement(JUDGE)) {

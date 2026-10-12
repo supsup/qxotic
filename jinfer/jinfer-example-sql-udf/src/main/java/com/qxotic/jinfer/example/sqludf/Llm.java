@@ -5,16 +5,16 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * One engine per JVM. H2 calls the UDFs as static methods, so the model has to be found from
- * static scope: the holder idiom loads it on the first call that needs it, and a shutdown hook
- * frees it.
+ * One engine per JVM. H2 calls the UDFs as static methods, so the model has to be found from static
+ * scope: the holder idiom loads it on the first call that needs it, and a shutdown hook frees it.
  *
  * <p>Knobs are system properties, read once at load:
  *
  * <ul>
  *   <li>{@code jinfer.sqludf.model}: the chat GGUF, as a model reference or a path (default {@value
  *       #DEFAULT_MODEL})
- *   <li>{@code jinfer.sqludf.embedModel}: the embedding GGUF (default {@value #DEFAULT_EMBED_MODEL})
+ *   <li>{@code jinfer.sqludf.embedModel}: the embedding GGUF (default {@value
+ *       #DEFAULT_EMBED_MODEL})
  *   <li>{@code jinfer.sqludf.contextCapacity}: positions per engine state (default {@value
  *       #DEFAULT_CONTEXT_CAPACITY})
  *   <li>{@code jinfer.sqludf.shuffleLabels}: present the labels in a per-row order, see {@link

@@ -10,11 +10,11 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * What H2 binds. Each public static method is one SQL function; {@link #register} issues the
- * {@code CREATE ALIAS} statements. H2 maps the Java types itself: {@code String} is {@code
- * VARCHAR}, {@code Float[]} is {@code REAL ARRAY}, {@code Boolean} is {@code BOOLEAN}, and a SQL
- * {@code NULL} argument arrives as a Java {@code null} - every function answers it with {@code NULL}
- * rather than asking the model about nothing.
+ * What H2 binds. Each public static method is one SQL function; {@link #register} issues the {@code
+ * CREATE ALIAS} statements. H2 maps the Java types itself: {@code String} is {@code VARCHAR},
+ * {@code Float[]} is {@code REAL ARRAY}, {@code Boolean} is {@code BOOLEAN}, and a SQL {@code NULL}
+ * argument arrives as a Java {@code null} - every function answers it with {@code NULL} rather than
+ * asking the model about nothing.
  *
  * <p>The instruction prefix of a classify or judge call is a pure function of its label set (and
  * question), never of the row, so the prompt cache serves it for every row of a query.
@@ -56,7 +56,8 @@ public final class LlmFunctions {
     /** {@code LLM_COMPLETE(prompt VARCHAR) -> VARCHAR}: free-form, greedy, token-budgeted. */
     public static String complete(String prompt) {
         if (prompt == null) return null;
-        int maxTokens = Integer.getInteger(COMPLETE_MAX_TOKENS_PROPERTY, DEFAULT_COMPLETE_MAX_TOKENS);
+        int maxTokens =
+                Integer.getInteger(COMPLETE_MAX_TOKENS_PROPERTY, DEFAULT_COMPLETE_MAX_TOKENS);
         return Llm.backend().complete(prompt, maxTokens);
     }
 
@@ -64,9 +65,9 @@ public final class LlmFunctions {
      * {@code LLM_CLASSIFY(text VARCHAR, labels VARCHAR) -> VARCHAR}: exactly one of the
      * comma-separated {@code labels}, enforced at the sampler. With {@code
      * jinfer.sqludf.shuffleLabels=true} the labels are listed in an order derived from the row's
-     * text (deterministic per row, uniform over rows), so a model's preference for the first
-     * option cannot favour one label across a whole table; the price is one cached prefix per
-     * permutation instead of one per label set.
+     * text (deterministic per row, uniform over rows), so a model's preference for the first option
+     * cannot favour one label across a whole table; the price is one cached prefix per permutation
+     * instead of one per label set.
      */
     public static String classify(String text, String labels) {
         if (text == null || labels == null) return null;
