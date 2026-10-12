@@ -134,6 +134,7 @@ plateau: tg within 5% of max from <N> threads
 ```
 
 The plateau line names the smallest count whose `tg` is at least 95% of the best `tg` in the sweep.
+When that is the largest count in the list, the sweep found no plateau: it bounds the plateau from below rather than locating it, and a wider list or a faster compiler is the next step.
 A test skipped with `-p 0` or `-n 0` reads `n/a`, and without `tg` there is no plateau.
 `--threads-sweep` excludes `-t` and skips the capabilities table.
 `make -C jinfer bench-sweep` resolves `MODEL=<reference>` through `jinfer pull` when `GGUF` is not given, and `BENCH_ARGS` passes the other options through.
