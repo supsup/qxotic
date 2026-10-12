@@ -22,7 +22,17 @@ java --add-modules jdk.incubator.vector --enable-native-access=ALL-UNNAMED \
 
 The recording starts before the model loads and is written when the command returns, or when the JVM exits on a signal.
 It holds the JDK's `profile` settings, jinfer's `jinfer.jfc` over them, and the per-token `jinfer.Decode` event switched on: a run that asks to be profiled wants its per-token latencies.
-`--jfr` is a model option, so it works with `chat`, `instruct`, `server`, `speak` and `transcribe`.
+`--jfr` is a model option, so every command that loads a model accepts it, but only the language-model path emits jinfer's load, prompt and token events.
+The other loads (`Models.loadSpeech`, `loadTranscription`, `loadEmbedder`, `loadReranker`) emit no `jinfer.ModelLoad`, and their work runs outside `ChatEngine` and `Generator`:
+
+| command | `ModelLoad` | `Tokenize` | `Prefill` | `Decode` | `Inference` |
+|---------|-------------|------------|-----------|----------|-------------|
+| `chat`, `instruct`, `server` with a language model | yes | yes | yes | yes, except under speculative decoding, which emits `jinfer.Speculation` per pass instead | yes |
+| `server` with an embedding or reranking model | no | no | no | no | yes (embeddings, rerank) |
+| `transcribe`, `server` with a transcription model | no | no | no | no | yes, from ports that emit it (Parakeet) |
+| `speak` | no | no | no | no | no |
+
+The JDK's own events (GC, allocation, CPU, execution samples) are in every recording.
 
 From a checkout, `make jfr-run` records the golden prompt.
 `MODEL=<ref or path>` selects the model and `FILE=<path>` the recording; the defaults are the `test-golden` model and `jinfer.jfr`.

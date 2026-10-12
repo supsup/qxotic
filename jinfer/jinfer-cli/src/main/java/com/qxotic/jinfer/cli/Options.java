@@ -658,6 +658,9 @@ final class Options {
                   -t, --threads <int>          compute workers (default: physical/fast cores)
                                                overrides -Djinfer.threads when both are given
                   --jfr <file>                 JFR recording of the run, per-token Decode on
+                                               load/prompt/token events: chat, instruct,
+                                               a language-model server; speak, transcribe
+                                               and retrieval record fewer (profiling.md)
 
                 References: [host/]owner/repo[@revision][/file][:quant]. Default host: hf.co.
                 Existing local files win. Remote files are downloaded once and cached.
