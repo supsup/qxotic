@@ -533,6 +533,7 @@
       <modules>
         <module>jinfer-example-judge-advisor</module>
         <module>jinfer-example-local-rag</module>
+        <module>jinfer-example-sql-udf</module>
       </modules>
     </profile>
   </profiles>

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.qxotic</groupId>
+    <artifactId>jinfer-parent</artifactId>
+    <version>0.3.1</version>
+  </parent>
+
+  <artifactId>jinfer-example-sql-udf</artifactId>
+  <packaging>jar</packaging>
+
+  <name>Jinfer SQL UDF Example</name>
+  <description>Demo: the model as a SQL function. H2 calls Jinfer in-process through CREATE ALIAS,
+    so SELECT LLM_CLASSIFY(body, 'bug,feature,question') FROM tickets runs the model next to the
+    rows with no sidecar and no IPC. Not published to Maven Central.</description>
+
+  <properties>
+    <maven.deploy.skip>true</maven.deploy.skip>
+    <!-- H2 is a dependency of THIS example only; the engine jars stay dependency-free. -->
+    <h2.version>2.4.240</h2.version>
+    <!-- Knobs for `mvn exec:exec` (make -C jinfer example-sql-udf); each is a system property
+         the demo reads, see README.md. -->
+    <jinfer.sqludf.model>LiquidAI/LFM2.5-350M-GGUF:Q8_0</jinfer.sqludf.model>
+    <jinfer.sqludf.embedModel>LiquidAI/LFM2.5-Embedding-350M-GGUF:Q8_0</jinfer.sqludf.embedModel>
+    <jinfer.sqludf.shuffleLabels>false</jinfer.sqludf.shuffleLabels>
+  </properties>
+
+  <!-- Demo: "LLM as a SQL function". One lazily loaded engine per JVM, bound to H2 as plain
+       static Java methods: LLM_COMPLETE, LLM_CLASSIFY (grammar-pinned to the label set),
+       LLM_EMBED + COSINE, LLM_JUDGE. Run: make -C jinfer example-sql-udf -->
+  <dependencies>
+    <dependency>
+      <groupId>com.qxotic</groupId>
+      <artifactId>jinfer-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.qxotic</groupId>
+      <artifactId>jinfer-chat</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.qxotic</groupId>
+      <artifactId>jinfer-cache</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.qxotic</groupId>
+      <artifactId>jinfer-hub</artifactId>
+    </dependency>
+    <!-- the one model family the demo needs: LFM2.5 serves both the chat and the embedding GGUF -->
+    <dependency>
+      <groupId>com.qxotic</groupId>
+      <artifactId>jinfer-lfm2</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.qxotic</groupId>
+      <artifactId>jam-vector</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <!-- the Java-hosted database: in-memory, calls the UDFs in-process -->
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>${h2.version}</version>
+    </dependency>
+    <!-- shared model fixtures (paths relative to the checkout; scripts/download-models.sh) -->
+    <dependency>
+      <groupId>com.qxotic</groupId>
+      <artifactId>jinfer-testkit</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- `mvn exec:exec` launches the demo in a fresh JVM with the flags every jinfer process
+           needs (exec:java would run inside Maven's JVM, which has no incubator vector module). -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <configuration>
+          <executable>java</executable>
+          <arguments>
+            <argument>--add-modules</argument>
+            <argument>jdk.incubator.vector,jdk.httpserver</argument>
+            <argument>--enable-native-access=ALL-UNNAMED</argument>
+            <argument>-Djinfer.sqludf.model=${jinfer.sqludf.model}</argument>
+            <argument>-Djinfer.sqludf.embedModel=${jinfer.sqludf.embedModel}</argument>
+            <argument>-Djinfer.sqludf.shuffleLabels=${jinfer.sqludf.shuffleLabels}</argument>
+            <argument>-classpath</argument>
+            <classpath />
+            <argument>com.qxotic.jinfer.example.sqludf.Main</argument>
+          </arguments>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
