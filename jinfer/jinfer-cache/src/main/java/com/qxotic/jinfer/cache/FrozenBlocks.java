@@ -57,6 +57,12 @@ public final class FrozenBlocks {
     static final int HEADER_BYTES = 3 * PAGE_BYTES;
     static final int SLOT_BYTES = 64;
     static final int INDEX_ENTRY_BYTES = 96; // 32+32+4+4+8+8+4(crc)+4(pad)
+    // the header page's stored model digest, after magic, version and the two geometry ints
+    static final int HEADER_DIGEST_OFFSET = 16;
+    // inside one index entry: key[4] at 0, parentKey[4] here, then from, to, offset, len, crc
+    static final int ENTRY_PARENT_KEY_OFFSET = 32;
+    // inside one commit slot: magic, pad, generation at 8, count at 16, index offset here, crc
+    static final int SLOT_INDEX_OFFSET_FIELD = 24;
     private static final int ALIGN = 64;
     private static final int COMMIT_MAGIC = 0x54494D43; // "CMIT"
     private static final int HEADER_CRC_OFFSET = 48;
@@ -181,7 +187,7 @@ public final class FrozenBlocks {
             throw corrupt(file, "header checksum mismatch");
         }
         byte[] stored = new byte[32];
-        header.position(16);
+        header.position(HEADER_DIGEST_OFFSET);
         header.get(stored);
         byte[] seed = modelSeed.digestBytes();
         if (!Arrays.equals(stored, seed)) {
@@ -238,7 +244,7 @@ public final class FrozenBlocks {
                     header.getInt(HEADER_CRC_OFFSET) == crc32cWithZero(header, HEADER_CRC_OFFSET);
             out.append(row("header crc", headerOk ? "ok" : "MISMATCH - header is corrupt"));
             byte[] stored = new byte[32];
-            header.get(16, stored);
+            header.get(HEADER_DIGEST_OFFSET, stored);
             String identity = storedDescription(header);
             out.append(row("identity", identity != null ? identity : "(not recorded)"));
             String digest = HexFormat.of().formatHex(stored);
@@ -499,7 +505,7 @@ public final class FrozenBlocks {
         }
         long generation = bytes.getLong(8);
         int count = bytes.getInt(16);
-        long indexOffset = bytes.getLong(24);
+        long indexOffset = bytes.getLong(SLOT_INDEX_OFFSET_FIELD);
         int indexCrc = bytes.getInt(32);
         if (generation < 0
                 || count < 0
