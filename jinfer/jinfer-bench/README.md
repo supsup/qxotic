@@ -111,6 +111,33 @@ The default is one thread per physical core; on Apple Silicon, P-cores only, as 
 `-t N` sets the same count for both tests and every backend.
 Decode is memory-bound at high thread counts; threads beyond the crossover do not increase decode throughput and can reduce it.
 
+### Thread sweep
+
+`--threads-sweep <list>` measures where that crossover is: `pp` and `tg` at every count in a comma-separated list, where `all` is the engine default.
+The thread budget is read once per process (see the rules below), so the sweep runs one child process per count, the same executable with the same JVM flags and `-t N --no-capabilities`, and parses each child's table.
+Each child's warm-up progress goes to stderr as usual; the result is one table per model on stdout, counts ascending, duplicates dropped, speedups against the smallest count, then the count from which decode has stopped scaling:
+
+```bash
+bin/jinfer-bench -m LFM2.5-350M-Q8_0.gguf -p 512 -n 128 -r 5 -w 2 --threads-sweep 1,2,4,all
+make -C jinfer bench-sweep GGUF=LFM2.5-350M-Q8_0.gguf THREADS=1,2,4,all    # JVM, builds the jar first
+```
+
+```text
+jinfer-bench 0.3.1 | runtime: native image | jam: native, vector, scalar | threads: 1,2,4,8 (sweep)
+| model            | threads |           pp t/s |           tg t/s | tg speedup | pp speedup |
+| ---------------- | ------: | ---------------: | ---------------: | ---------: | ---------: |
+| LFM2.5-350M-Q8_0 |       1 |   <pp1> ± <sd>   |   <tg1> ± <sd>   |      1.00x |      1.00x |
+| LFM2.5-350M-Q8_0 |       2 |   <pp2> ± <sd>   |   <tg2> ± <sd>   |  <tg2/tg1> |  <pp2/pp1> |
+| LFM2.5-350M-Q8_0 |       4 |   <pp4> ± <sd>   |   <tg4> ± <sd>   |  <tg4/tg1> |  <pp4/pp1> |
+| LFM2.5-350M-Q8_0 |       8 |   <pp8> ± <sd>   |   <tg8> ± <sd>   |  <tg8/tg1> |  <pp8/pp1> |
+plateau: tg within 5% of max from <N> threads
+```
+
+The plateau line names the smallest count whose `tg` is at least 95% of the best `tg` in the sweep.
+A test skipped with `-p 0` or `-n 0` reads `n/a`, and without `tg` there is no plateau.
+`--threads-sweep` excludes `-t` and skips the capabilities table.
+`make -C jinfer bench-sweep` resolves `MODEL=<reference>` through `jinfer pull` when `GGUF` is not given, and `BENCH_ARGS` passes the other options through.
+
 **Warnings.**
 The engine reports each performance cliff once per run, on stderr, as `perf cliff [NAME]: ...`.
 A reported number must come from a run without cliffs, or state which cliff it carried.
@@ -168,6 +195,7 @@ llama-bench <build>, -t 16: pp512 <t/s>, tg128 <t/s>
 | `--no-warmup` | skip warm-up; for native code only |
 | `--no-capabilities` | skip the second table |
 | `-t, --threads <N>` | thread budget for both tests and every backend; default: one per physical core |
+| `--threads-sweep <list>` | `pp` and `tg` at each count (comma-separated, `all` = engine default), one child process per count; one table per model with speedups and the `tg` plateau; excludes `-t`, skips the second table |
 | `--ctx <N>` | context for both tests; default: `p` for `pp`, `n` for `tg`, as `llama-bench` |
 | `--with <capability>=<path>` | attach a companion, repeatable: `media=<mmproj.gguf>`, `speculation=<mtp.gguf>` |
 | `--media <image>` | also measure projected-media cold and warm latency; needs `--with media=` |

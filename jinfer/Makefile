@@ -54,10 +54,30 @@ test-golden: jar ## Determinism check: two greedy runs, byte-identical (MODEL=re
 	@$(GOLDEN_RUN) > /tmp/jinfer-golden-2.txt 2> /tmp/jinfer-golden-2.err || { cat /tmp/jinfer-golden-2.err >&2; exit 1; }
 	@diff /tmp/jinfer-golden-1.txt /tmp/jinfer-golden-2.txt && echo "test-golden: deterministic"
 
+# jinfer-bench at each thread count in THREADS, one child process per count (the thread budget
+# is fixed per process), one table per model: pp, tg, speedups, and the count from which decode
+# stops scaling. The bench takes a GGUF path: GGUF=path/to/model.gguf, or MODEL (a reference,
+# as test-golden) resolved through `jinfer pull`, which prints the path. BENCH_ARGS passes
+# anything else through (-p, -n, -r, -w, ...). The OOB flag is the one the README's reported
+# numbers use.
+BENCH_JAR = $(ROOT)/bin/jinfer-bench.jar
+THREADS ?= 1,2,4,all
+BENCH_ARGS ?= -p 512 -n 128 -r 5 -w 2
+
+bench-sweep: jar bench-jar ## Thread sweep of pp/tg: THREADS=1,2,4,all GGUF=model.gguf (or MODEL=ref) BENCH_ARGS="-r 5"
+	@gguf="$(GGUF)"; \
+	if [ -z "$$gguf" ]; then gguf=$$($(JAVA) $(JAVA_RUNTIME_OPTIONS) -jar $(JAR_FILE) pull $(MODEL) | tail -1); fi; \
+	echo "bench-sweep: $$gguf threads=$(THREADS)" >&2; \
+	$(JAVA) $(JAVA_RUNTIME_OPTIONS) -Djdk.incubator.vector.VECTOR_ACCESS_OOB_CHECK=0 -jar $(BENCH_JAR) \
+		-m "$$gguf" $(BENCH_ARGS) --threads-sweep $(THREADS)
+
+bench-jar: ## The bench jar -> ../bin/jinfer-bench.jar
+	$(MAKE) -C $(ROOT) bench-jar
+
 help: ## Show this help
 	@awk 'BEGIN { FS = " *## *" } \
 		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5); next } \
 		NF >= 2 && $$1 ~ /^[a-zA-Z_-]+:/ { t = $$1; sub(/:.*/, "", t); \
 			printf "  \033[36m%-16s\033[0m %s\n", t, $$2 }' $(MAKEFILE_LIST)
 
-.PHONY: default help jar test native clean run run-jar-command test-golden
+.PHONY: default help jar bench-jar test native clean run run-jar-command test-golden bench-sweep

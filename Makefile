@@ -42,6 +42,10 @@ jinfer-jar: ## The jinfer CLI jar -> bin/jinfer.jar (a clean build: shading has 
 	$(MAVEN) $(MAVEN_FLAGS) -pl jinfer/jinfer-cli -am clean package -DskipTests
 	mkdir -p bin && cp jinfer/jinfer-cli/target/jinfer.jar bin/jinfer.jar
 
+bench-jar: ## The jinfer-bench jar -> bin/jinfer-bench.jar (a clean build, as jinfer-jar)
+	$(MAVEN) $(MAVEN_FLAGS) -pl jinfer/jinfer-bench -am clean package -DskipTests
+	mkdir -p bin && cp jinfer/jinfer-bench/target/jinfer-bench.jar bin/jinfer-bench.jar
+
 ##@ Test
 
 test: ## Build and test the whole reactor (model-backed suites are tag-gated, see jinfer/pom.xml)
@@ -151,5 +155,5 @@ help: ## Show this help
 	@echo
 	@echo '  Subtrees: make -C jinfer help (run, test-golden, ...) | make -C jota help | make -C jinfer/jinfer-tts native'
 
-.PHONY: default help package compile install jar jinfer-jar test jinfer-test jota-test \
+.PHONY: default help package compile install jar jinfer-jar bench-jar test jinfer-test jota-test \
 	jam-test native format clean jinfer-clean jota-clean examples release-canary jam-natives toknroll-fixtures test-fixtures ci ci-format ci-test ci-corpus ci-release release-plan release-deploy
