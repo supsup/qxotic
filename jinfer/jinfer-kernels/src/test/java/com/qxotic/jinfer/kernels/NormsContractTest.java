@@ -2,7 +2,9 @@ package com.qxotic.jinfer.kernels;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.qxotic.jinfer.Views;
 import com.qxotic.jota.DataType;
@@ -225,6 +227,82 @@ class NormsContractTest {
                     assertEquals(
                             expected, actual[row * width + c], 5e-3, "row " + row + " lane " + c);
                 }
+            }
+        }
+    }
+
+    /**
+     * The four-accumulator block bound at the top of the int range, with no memory behind it: the
+     * blocks admitted must be the count long arithmetic gives, and none may reach past {@code
+     * size}. The loop under test is the kernels' own shape, started two blocks before the bound so
+     * the largest sizes stay cheap.
+     */
+    @Test
+    void unrolledBoundAdmitsExactlyTheWholeBlocksUpToIntMax() {
+        for (int lanes : new int[] {2, 4, 8, 16}) {
+            int unroll = 4 * lanes;
+            int[] sizes = {
+                0,
+                1,
+                unroll - 1,
+                unroll,
+                unroll + 1,
+                Integer.MAX_VALUE - unroll,
+                Integer.MAX_VALUE - unroll + 1,
+                Integer.MAX_VALUE - 1,
+                Integer.MAX_VALUE
+            };
+            for (int size : sizes) {
+                String at = "lanes " + lanes + " size " + size;
+                int bound = Norms.unrolledBound(size, unroll);
+                long expectedBlocks = (long) size / unroll;
+
+                assertEquals(0, bound % unroll, at);
+                assertTrue(bound >= 0 && bound <= size, at);
+                assertEquals(expectedBlocks, bound / unroll, at);
+                assertEquals(expectedBlocks * unroll, bound, at);
+
+                int start = Math.max(0, bound - 2 * unroll);
+                long expectedFromStart = expectedBlocks - start / unroll;
+                long admitted = 0;
+                for (int i = start; i < bound; i += unroll) {
+                    assertTrue((long) i + unroll <= size, at + " block at " + i);
+                    assertTrue(++admitted <= expectedFromStart, at + " runs past the bound");
+                }
+                assertEquals(expectedFromStart, admitted, at);
+            }
+        }
+    }
+
+    /**
+     * The audit's case: a 128-bit species (4 lanes, blocks of 16) with {@code i} already at {@code
+     * size = 2147483632}. The int sum the loop used to test wraps to {@link Integer#MIN_VALUE} and
+     * passes; the long sum is 2147483648 and does not, and neither does the bound.
+     */
+    @Test
+    void unrolledBoundRefusesTheBlockAnIntSumWrapsInto() {
+        int unroll = 16, size = 2147483632, i = size;
+
+        assertEquals(Integer.MIN_VALUE, i + unroll);
+        assertTrue(i + unroll <= size, "the wrapped int condition admits the block");
+        assertEquals(2147483648L, (long) i + unroll);
+        assertFalse((long) i + unroll <= size);
+
+        assertEquals(size, Norms.unrolledBound(size, unroll));
+        assertFalse(i < Norms.unrolledBound(size, unroll));
+    }
+
+    /** A size below one block, zero and negative ones included, admits no block from index 0. */
+    @Test
+    void unrolledBoundAdmitsNoBlockBelowOneBlock() {
+        for (int lanes : new int[] {2, 4, 8, 16}) {
+            int unroll = 4 * lanes;
+            int[] sizes = {
+                Integer.MIN_VALUE, Integer.MIN_VALUE + 1, -unroll - 1, -unroll, -1, 0, unroll - 1
+            };
+            for (int size : sizes) {
+                assertFalse(
+                        0 < Norms.unrolledBound(size, unroll), "lanes " + lanes + " size " + size);
             }
         }
     }

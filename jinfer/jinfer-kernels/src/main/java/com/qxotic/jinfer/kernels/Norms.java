@@ -20,6 +20,17 @@ public final class Norms {
     private Norms() {}
 
     /**
+     * End of the four-accumulator blocks: the largest multiple of {@code unroll} not above {@code
+     * size}, and never positive for a {@code size} below one block. The loops compare {@code i}
+     * against this instead of testing {@code i + unroll <= size}, because that sum wraps negative
+     * within {@code unroll} of {@link Integer#MAX_VALUE} and admits a block past the end; {@code
+     * i} stops exactly on this bound, so stepping to it cannot wrap either.
+     */
+    static int unrolledBound(int size, int unroll) {
+        return size - size % unroll;
+    }
+
+    /**
      * RMS normalization: {@code out = weight * x / sqrt(mean(x^2) + eps)} over {@code size}
      * contiguous lanes.
      */
@@ -38,6 +49,7 @@ public final class Norms {
             var species = F_SPECIES;
             int lanes = species.length(), unroll = 4 * lanes;
             int upperBound = species.loopBound(size);
+            int unrolledBound = unrolledBound(size, unroll);
             // Four accumulators, not one: acc = x.fma(x, acc) makes every vector of the row wait
             // for the previous one, so a single chain runs at FMA latency and leaves the FMA
             // units mostly idle. Four independent chains over blocks of 4 * lanes keep them fed;
@@ -46,7 +58,7 @@ public final class Norms {
             // jinfer-bench measures the gain.
             FloatVector acc0 = FloatVector.zero(species), acc1 = acc0, acc2 = acc0, acc3 = acc0;
             int i = 0;
-            for (; i + unroll <= size; i += unroll) {
+            for (; i < unrolledBound; i += unroll) {
                 var x0 =
                         FloatVector.fromMemorySegment(
                                 species,
@@ -258,11 +270,12 @@ public final class Norms {
             var species = F_SPECIES;
             int lanes = species.length(), unroll = 4 * lanes;
             int upperBound = species.loopBound(size);
+            int unrolledBound = unrolledBound(size, unroll);
             // Four independent FMA chains, the rmsnorm reduction's reason: one chain runs at FMA
             // latency. Same block, remainder and tail structure as there.
             FloatVector acc0 = FloatVector.zero(species), acc1 = acc0, acc2 = acc0, acc3 = acc0;
             int i = 0;
-            for (; i + unroll <= size; i += unroll) {
+            for (; i < unrolledBound; i += unroll) {
                 var x0 =
                         FloatVector.fromMemorySegment(
                                 species,
