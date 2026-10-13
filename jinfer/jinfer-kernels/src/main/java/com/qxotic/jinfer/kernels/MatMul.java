@@ -690,8 +690,65 @@ public final class MatMul {
         FloatVector val = FloatVector.zero(F_SPECIES);
         long bo = wByte;
         int j = 0;
-        for (; j < upperBound; j += Q8_BLOCK, bo += Q8_BLOCK_BYTES) {
-            val = blockFma(w, bo, x, xByte + 4L * j, val);
+        // The block body is written out per width INSIDE the loop rather than called: C2 declines
+        // to inline a helper that returns a FloatVector once that helper has been compiled on its
+        // own and its machine code exceeds InlineSmallCode (2500 bytes with tiered C2; a block of
+        // Vector API intrinsics is bigger), whatever its bytecode size, and a FloatVector that
+        // crosses a call is materialized per block. Measured on Apple M5 Max, 4 threads,
+        // LFM2.5-350M Q8_0 decode: 31 tok/s through the helper, 86 to 91 with it inlined. The
+        // switch folds at JIT time (F_SPECIES is a static final), so each JIT compiles one loop.
+        switch (F_SPECIES.vectorBitSize()) {
+            case 256 -> {
+                for (; j < upperBound; j += Q8_BLOCK, bo += Q8_BLOCK_BYTES) {
+                    long xb = xByte + 4L * j;
+                    var wScale = FloatVector.broadcast(F_SPECIES, readFloat16(w, bo));
+                    var wBytes =
+                            ByteVector.fromMemorySegment(
+                                    ByteVector.SPECIES_256, w, bo + 2, ByteOrder.LITTLE_ENDIAN);
+                    var s0 = floatsAt(x, xb).mul(wBytes.castShape(F_SPECIES, 0));
+                    var s1 =
+                            floatsAt(x, xb + 4L * 2 * F_SPECIES.length())
+                                    .mul(wBytes.castShape(F_SPECIES, 2));
+                    s0 =
+                            floatsAt(x, xb + 4L * F_SPECIES.length())
+                                    .fma(wBytes.castShape(F_SPECIES, 1), s0);
+                    s1 =
+                            floatsAt(x, xb + 4L * 3 * F_SPECIES.length())
+                                    .fma(wBytes.castShape(F_SPECIES, 3), s1);
+                    val = s0.add(s1).fma(wScale, val);
+                }
+            }
+            case 128 -> {
+                for (; j < upperBound; j += Q8_BLOCK, bo += Q8_BLOCK_BYTES) {
+                    long xb = xByte + 4L * j;
+                    var wScale = FloatVector.broadcast(F_SPECIES, readFloat16(w, bo));
+                    for (int i = 0; i < 2; ++i) {
+                        int off = i * 16;
+                        var wBytes =
+                                ByteVector.fromMemorySegment(
+                                        ByteVector.SPECIES_128,
+                                        w,
+                                        bo + 2 + i * ByteVector.SPECIES_128.vectorByteSize(),
+                                        ByteOrder.LITTLE_ENDIAN);
+                        var s0 = floatsAt(x, xb + 4L * off).mul(wBytes.castShape(F_SPECIES, 0));
+                        var s1 =
+                                floatsAt(x, xb + 4L * (off + 2 * F_SPECIES.length()))
+                                        .mul(wBytes.castShape(F_SPECIES, 2));
+                        s0 =
+                                floatsAt(x, xb + 4L * (off + F_SPECIES.length()))
+                                        .fma(wBytes.castShape(F_SPECIES, 1), s0);
+                        s1 =
+                                floatsAt(x, xb + 4L * (off + 3 * F_SPECIES.length()))
+                                        .fma(wBytes.castShape(F_SPECIES, 3), s1);
+                        val = s0.add(s1).fma(wScale, val);
+                    }
+                }
+            }
+            default -> {
+                for (; j < upperBound; j += Q8_BLOCK, bo += Q8_BLOCK_BYTES) {
+                    val = blockFma(w, bo, x, xByte + 4L * j, val);
+                }
+            }
         }
         result += val.reduceLanes(VectorOperators.ADD);
         if (j < k) {
@@ -700,75 +757,86 @@ public final class MatMul {
         return result;
     }
 
+    /**
+     * One Q8_0 block (32 weights) multiplied into the running accumulator. The per-width bodies
+     * live in their own methods, each under C2's hot-site inlining limit (FreqInlineSize, 325
+     * bytecodes on every platform): as one 566-bytecode method C2 reported "hot method too big"
+     * at the dotQ8Generic call site, the returned FloatVector was materialized per block and
+     * every op after it ran the Vector API's Java fallback (decode 31 tok/s against 91 with the
+     * call inlined, Apple M5 Max, 4 threads, LFM2.5-350M Q8_0). {@code @AlwaysInline} is honoured
+     * by the Graal compilers only; C2 needs the size to fit. The switch folds at JIT time because
+     * {@code F_SPECIES} is a static final.
+     */
     @AlwaysInline("hot Vector API leaf: an escaping FloatVector is materialized per call")
     private static FloatVector blockFma(
             MemorySegment w, long blockOffset, MemorySegment x, long xByte, FloatVector acc) {
-        var wScale = FloatVector.broadcast(F_SPECIES, readFloat16(w, blockOffset));
         return switch (F_SPECIES.vectorBitSize()) {
-            case 512 -> {
-                var w0 =
-                        ByteVector.fromMemorySegment(
-                                ByteVector.SPECIES_128,
-                                w,
-                                blockOffset + 2,
-                                ByteOrder.LITTLE_ENDIAN);
-                var w1 =
-                        ByteVector.fromMemorySegment(
-                                ByteVector.SPECIES_128,
-                                w,
-                                blockOffset + 2 + 16,
-                                ByteOrder.LITTLE_ENDIAN);
-                var s0 = floatsAt(x, xByte).mul(w0.castShape(F_SPECIES, 0));
-                var s1 =
-                        floatsAt(x, xByte + 4L * F_SPECIES.length())
-                                .mul(w1.castShape(F_SPECIES, 0));
-                yield s0.add(s1).fma(wScale, acc);
-            }
-            case 256 -> {
-                var wBytes =
-                        ByteVector.fromMemorySegment(
-                                ByteVector.SPECIES_256,
-                                w,
-                                blockOffset + 2,
-                                ByteOrder.LITTLE_ENDIAN);
-                var s0 = floatsAt(x, xByte).mul(wBytes.castShape(F_SPECIES, 0));
-                var s1 =
-                        floatsAt(x, xByte + 4L * 2 * F_SPECIES.length())
-                                .mul(wBytes.castShape(F_SPECIES, 2));
-                s0 =
-                        floatsAt(x, xByte + 4L * F_SPECIES.length())
-                                .fma(wBytes.castShape(F_SPECIES, 1), s0);
-                s1 =
-                        floatsAt(x, xByte + 4L * 3 * F_SPECIES.length())
-                                .fma(wBytes.castShape(F_SPECIES, 3), s1);
-                yield s0.add(s1).fma(wScale, acc);
-            }
-            case 128 -> {
-                FloatVector val = acc;
-                for (int i = 0; i < 2; ++i) {
-                    int off = i * 16;
-                    var wBytes =
-                            ByteVector.fromMemorySegment(
-                                    ByteVector.SPECIES_128,
-                                    w,
-                                    blockOffset + 2 + i * ByteVector.SPECIES_128.vectorByteSize(),
-                                    ByteOrder.LITTLE_ENDIAN);
-                    var s0 = floatsAt(x, xByte + 4L * off).mul(wBytes.castShape(F_SPECIES, 0));
-                    var s1 =
-                            floatsAt(x, xByte + 4L * (off + 2 * F_SPECIES.length()))
-                                    .mul(wBytes.castShape(F_SPECIES, 2));
-                    s0 =
-                            floatsAt(x, xByte + 4L * (off + F_SPECIES.length()))
-                                    .fma(wBytes.castShape(F_SPECIES, 1), s0);
-                    s1 =
-                            floatsAt(x, xByte + 4L * (off + 3 * F_SPECIES.length()))
-                                    .fma(wBytes.castShape(F_SPECIES, 3), s1);
-                    val = s0.add(s1).fma(wScale, val);
-                }
-                yield val;
-            }
+            case 512 -> blockFma512(w, blockOffset, x, xByte, acc);
+            case 256 -> blockFma256(w, blockOffset, x, xByte, acc);
+            case 128 -> blockFma128(w, blockOffset, x, xByte, acc);
             default -> throw new UnsupportedOperationException(F_SPECIES.toString());
         };
+    }
+
+    @AlwaysInline("hot Vector API leaf: an escaping FloatVector is materialized per call")
+    private static FloatVector blockFma512(
+            MemorySegment w, long blockOffset, MemorySegment x, long xByte, FloatVector acc) {
+        var wScale = FloatVector.broadcast(F_SPECIES, readFloat16(w, blockOffset));
+        var w0 =
+                ByteVector.fromMemorySegment(
+                        ByteVector.SPECIES_128, w, blockOffset + 2, ByteOrder.LITTLE_ENDIAN);
+        var w1 =
+                ByteVector.fromMemorySegment(
+                        ByteVector.SPECIES_128, w, blockOffset + 2 + 16, ByteOrder.LITTLE_ENDIAN);
+        var s0 = floatsAt(x, xByte).mul(w0.castShape(F_SPECIES, 0));
+        var s1 = floatsAt(x, xByte + 4L * F_SPECIES.length()).mul(w1.castShape(F_SPECIES, 0));
+        return s0.add(s1).fma(wScale, acc);
+    }
+
+    @AlwaysInline("hot Vector API leaf: an escaping FloatVector is materialized per call")
+    private static FloatVector blockFma256(
+            MemorySegment w, long blockOffset, MemorySegment x, long xByte, FloatVector acc) {
+        var wScale = FloatVector.broadcast(F_SPECIES, readFloat16(w, blockOffset));
+        var wBytes =
+                ByteVector.fromMemorySegment(
+                        ByteVector.SPECIES_256, w, blockOffset + 2, ByteOrder.LITTLE_ENDIAN);
+        var s0 = floatsAt(x, xByte).mul(wBytes.castShape(F_SPECIES, 0));
+        var s1 =
+                floatsAt(x, xByte + 4L * 2 * F_SPECIES.length())
+                        .mul(wBytes.castShape(F_SPECIES, 2));
+        s0 = floatsAt(x, xByte + 4L * F_SPECIES.length()).fma(wBytes.castShape(F_SPECIES, 1), s0);
+        s1 =
+                floatsAt(x, xByte + 4L * 3 * F_SPECIES.length())
+                        .fma(wBytes.castShape(F_SPECIES, 3), s1);
+        return s0.add(s1).fma(wScale, acc);
+    }
+
+    @AlwaysInline("hot Vector API leaf: an escaping FloatVector is materialized per call")
+    private static FloatVector blockFma128(
+            MemorySegment w, long blockOffset, MemorySegment x, long xByte, FloatVector acc) {
+        var wScale = FloatVector.broadcast(F_SPECIES, readFloat16(w, blockOffset));
+        FloatVector val = acc;
+        for (int i = 0; i < 2; ++i) {
+            int off = i * 16;
+            var wBytes =
+                    ByteVector.fromMemorySegment(
+                            ByteVector.SPECIES_128,
+                            w,
+                            blockOffset + 2 + i * ByteVector.SPECIES_128.vectorByteSize(),
+                            ByteOrder.LITTLE_ENDIAN);
+            var s0 = floatsAt(x, xByte + 4L * off).mul(wBytes.castShape(F_SPECIES, 0));
+            var s1 =
+                    floatsAt(x, xByte + 4L * (off + 2 * F_SPECIES.length()))
+                            .mul(wBytes.castShape(F_SPECIES, 2));
+            s0 =
+                    floatsAt(x, xByte + 4L * (off + F_SPECIES.length()))
+                            .fma(wBytes.castShape(F_SPECIES, 1), s0);
+            s1 =
+                    floatsAt(x, xByte + 4L * (off + 3 * F_SPECIES.length()))
+                            .fma(wBytes.castShape(F_SPECIES, 3), s1);
+            val = s0.add(s1).fma(wScale, val);
+        }
+        return val;
     }
 
     // 512-path helper: 16 sign-extended bytes widened to a float vector (part-0 cast).
