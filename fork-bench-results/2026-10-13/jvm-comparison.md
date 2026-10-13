@@ -119,3 +119,36 @@ Readings:
 - The C2 decode cliff is the same on every HotSpot build, and JDK 26 does not fix it: 32 to 33 default, 84 to 87 with the inlining flags. Vendor and version are ruled out again; the panama-dev report, if filed, is against C2 itself.
 - Oracle GraalVM has NO process-history dependence: decode-only 112.6 and prefill-first 110.2 are the same state, and its prefill (453) is at or above C2's. The decode-only slow state (39) is specific to GraalVM CE 25.4.4.1. The CE compiler lacks the enterprise optimizations of the Oracle build; which one of them is the difference is not established and is the next question for the Graal reading.
 - Best number on this machine tonight, same jar, no flags, no code change: Oracle GraalVM, 453 prefill and 112 decode at 4 threads, against C2's 422 and 33.
+
+## What is failing, named, and the fix (02:28-02:50Z)
+
+Isolation by -XX:CompileCommand (Corretto 25.0.2, decode-only, 4 threads, fresh JVM each; logs inline-probe*.log, probe-print-sweep.log in the lead scratchpad, copied by Lattice):
+
+| arm | tg128 |
+|---|---|
+| default | 30.7 to 32.6 |
+| force-inline jdk.incubator.vector.*::* only | 30.6 |
+| force-inline com.qxotic.jam.vector.*::* only (band kernel package) | 32.5 |
+| force-inline com.qxotic.jinfer.kernels.*::* only | 84.9 |
+| force-inline com.qxotic.jinfer.kernels.MatMul::* only | 88.6 |
+| force-inline MatMul::blockFma ONLY | 90.9 |
+| -XX:FreqInlineSize=2000 alone | 64.1 |
+| -XX:InlineSmallCode=16000 alone | 31.4 |
+
+The method: `MatMul.blockFma` (jinfer-kernels), 566 bytecodes, one Q8_0 block multiplied into the accumulator, three vector-width arms in one switch, called per block from `dotQ8Generic`, annotated with `com.oracle.svm.shared.AlwaysInline`, which the Graal compilers honour and C2 does not know. PrintInlining on the call site under C2: "hot method too big".
+
+The rules, at source (openjdk/jdk tag jdk-25-ga, src/hotspot/share/opto/bytecodeInfo.cpp, InlineTree::should_inline and should_not_inline):
+1. At a hot call site the callee may be up to `FreqInlineSize` bytecodes (325 on aarch64 and x86, cpu/*/c2_globals_*.hpp); larger is "hot method too big". blockFma is 566.
+2. A callee that already has compiled code is declined when its machine code exceeds `InlineSmallCode` ("already compiled into a big method"); the effective default with tiered C2 is 2500 (compilerDefinitions.cpp resets the CPU header's 1000; Lattice's reading, 18036). A block of Vector API intrinsics compiles to more than that.
+Platform is not the variable: both defaults are the same on x86. The author sees it on the Mac because the Mac runs the pure-Java matmul (no native library), so this method is the hot path.
+
+Two patches on branch fixpoint/matmul-blockfma-inline (off upstream c7924d5d1):
+- Split blockFma into blockFma512/256/128 (100/120/171/235 bytecodes) behind a constant-folding dispatcher: satisfies rule 1 only. Decode-only 30.1 and 31.0; with -XX:InlineSmallCode=16000 added, 86.4; with -XX:FreqInlineSize=2000 added, 57.8. PrintInlining then says blockFma128 "already compiled into a big method".
+- Write the 256 and 128 block bodies out inside dotQ8Generic's loop (dotQ8Generic becomes 622 bytecodes, which is fine for a compile root; the helpers stay for the 512 path): satisfies both. No flags.
+
+| | Corretto 25.0.2 decode-only | Corretto prefill then decode | GraalVM CE 25.4.4.1 decode-only |
+|---|---|---|---|
+| before (same jar lineage, 319d97e15) | 30.1, 31.0 | 404 / 32.3 | 39.1 |
+| after (fixpoint/matmul-blockfma-inline) | 80.5, 81.1 | 379 / 79.3 | 101.2 |
+
+jinfer-kernels module tests at the fix: 0 failures. The fix also removes GraalVM CE's decode-only slow state (39 to 101, against 108 in its prefill-first state), which says that state was the same helper not being inlined under CE's decode-only profile. Not re-measured: the sweep at all thread counts, Oracle GraalVM, JDK 26 and Temurin with the fix, x86, the other kernels that carry the same shape (FlashAttention qkTile 672 bytecodes, pvTile 457, accumulate 395, expRowInPlace 440, Ops.siluMultiplyInPlace 462; all reported "hot method too big" in the same log and are prefill-side).
