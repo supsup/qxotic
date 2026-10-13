@@ -41,15 +41,15 @@ Each result file also records the `perf cliff [NAME]` lines the engine printed o
 | H1 | macOS | Corretto 25.0.2 | vector | yes (re-measures the existing run with 6 added) | run-host.sh |
 | H2 | macOS | GraalVM CE 25.4.4.1 | vector | yes | run-host.sh |
 | H3 | macOS | GraalVM CE 25.0.0 | vector | yes, optional | run-host.sh |
-| H4 | macOS | Corretto 25.0.2 | native | NO: the host has no cmake, so `libjam.dylib` cannot be built | - |
-| H5 | macOS | GraalVM CE 25.4.4.1 | native | NO: same reason | - |
+| H4 | macOS | Corretto 25.0.2 | native | yes since 2026-10-13 (cmake installed via Homebrew on the owner's word); measured, see 2026-10-13/native-mac/ | run-host.sh after `make bench-jar MAVEN_FLAGS=-B` |
+| H5 | macOS | GraalVM CE 25.4.4.1 | native | yes since 2026-10-13; measured, see 2026-10-13/native-mac/ | run-host.sh, same jar |
 | L1 | Linux aarch64 | Temurin 25 | vector | yes | run-container.sh (one invocation covers L1 and L2) |
 | L2 | Linux aarch64 | Temurin 25 | native | yes | same invocation as L1 |
 | L3 | Linux aarch64 | GraalVM CE 25 | vector | yes, once the image tag is confirmed | run-container.sh (one invocation covers L3 and L4) |
 | L4 | Linux aarch64 | GraalVM CE 25 | native | yes, once the image tag is confirmed | same invocation as L3 |
 | X | any x86-64 | any | any | NO: this machine is aarch64. An x86 container here would run under emulation, and an emulated number measures the emulator, not the engine or the JIT. run-container.sh refuses a non-aarch64 host and pins `--platform linux/arm64` | - |
 
-Why H4 and H5 stay impossible rather than "install cmake": that is a change to the host, not a benchmark step, and it is not this plan's to make.
+H4 and H5 were impossible until the host owner chose to install cmake (2026-10-13); the rule stands that a host change is the owner's call, not a benchmark step.
 If cmake is installed later, build without `MAVEN_FLAGS=-Djam.native.skip=true`; run-host.sh then names the file after whatever backend the header lists first.
 
 ## Commands
