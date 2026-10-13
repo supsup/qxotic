@@ -156,3 +156,34 @@ jinfer-kernels module tests at the fix: 0 failures. The fix also removes GraalVM
 ## Independent confirmation (Lattice, PROJECT/stafficy/37928, 03:14Z)
 
 Own clean checkout and build at the fix commit 275932109ecb, own jar hashes, same model, 4 threads, decode-only, no flags: Corretto 25.0.2 87.74 +/- 0.22 (mine 80.5 and 81.1), GraalVM CE 25.4.4.1 103.35 +/- 0.29 (mine 101.2). On the unfixed 319d97e15 jar, force-inlining MatMul.blockFma alone: 85.23 (mine 90.9); force MatMul class 85.61; force the engine packages 83.17; FreqInlineSize=2000 alone 63.09; InlineSmallCode=16000 alone 32.07. All within 15 percent of this file's numbers. Her source corrections, adopted above: the effective InlineSmallCode is 2500 with tiered C2 on x86, aarch64 and riscv64 (compilerDefinitions.cpp), the CPU-header 1000 is not the effective value; "callee uses too much stack" is a C1 GraphBuilder message and does not identify tier 3 by itself; Q8Kernel.dequantizeRow returns void and was never the vector-returning boundary; the PrintInlining file is interleaved by concurrent compiler threads and should be read raw. Her reading of the two recordings with 128-frame stacks: of 12,669 C2 samples outside the recorded prefill intervals, 9,424 top frames are lanewiseTemplate and 9,432 stacks contain MatMul.blockFma; of 1,270 sampled Float128Vector allocations, 1,162 have blockFma as the first engine frame. That is the materialization localized to the method, from the original recordings, independently of the force-inline probes. She did not rerun the kernel tests and her confirmation is a benchmark statement, not a correctness verdict; numerical parity controls remain the PR's job.
+
+## Linux aarch64 in a container, before and after the fix (04:04-04:18Z)
+
+run-container.sh, image qxotic-bench:temurin (eclipse-temurin:25-jdk, Ubuntu 26.04.1, java 25.0.4.1), Docker 29.8.2 on OrbStack, --cpus 8 --memory 16g, model on a named volume, source rebuilt inside the container, two jars per cell (without and with the cmake-built jam-native). Before = fixpoint/bench-thread-sweep 02ada9895; after = the same plus the two fix commits (local branch fixpoint/bench-thread-sweep-plus-blockfma, 192ff3544). Files under fork-bench-results/2026-10-13/linux/{before,after}/. First run of this harness: its in-container script is fed on stdin and Maven consumed it after the first build; fixed by closing stdin for every child (tools/run-container.sh, this commit).
+
+Pure-Java backend (jam vector, C2 on Linux), tokens per second:
+
+| threads | pp before | pp after | tg before | tg after | tg ratio |
+|---|---|---|---|---|---|
+| 1 | 128.8 | 128.7 | 7.0 | 24.1 | 3.4x |
+| 2 | 228.4 | 235.6 | 13.4 | 44.0 | 3.3x |
+| 4 | 378.9 | 399.7 | 25.0 | 75.6 | 3.0x |
+| 6 | 576.3 | 559.2 | 34.5 | 104.9 | 3.0x |
+| 8 | 697.5 | 692.0 | 41.5 | 123.5 | 3.0x |
+
+Native backend (jam-native libjam.so built by cmake inside the container), before / after:
+
+| threads | pp | tg before | tg after |
+|---|---|---|---|
+| 1 | 307 / 308 | 106.8 | 106.3 |
+| 2 | 567 / 563 | 193.3 | 193.8 |
+| 4 | 918 / 921 | 273.5 | 287.8 |
+| 6 | 1218 / 1193 | 329.4 | 307.3 |
+| 8 | 1413 / 1432 | 344.4 | 342.8 |
+
+Readings:
+- The cliff and the fix are the same on Linux HotSpot as on macOS, larger if anything: Linux C2 decoded at half the Mac's rate before the fix (7.0 vs 12.9 at 1 thread) and the fix recovers 3.0 to 3.4x against the Mac's 2.6x. Prefill is unchanged within noise. "On HotSpot, both operating systems" is now a measured sentence.
+- The native backend is untouched by the change (every row within noise), because with libjam loaded decode never runs the Java dot product. The scope of the fix is the pure-Java path: every macOS host (no cmake, no libjam build upstream) and any build with -Djam.native.skip=true.
+- The native backend remains the fast path where it exists: 2.8x the fixed Java decode at 8 threads (343 vs 123) and 2x its prefill (1432 vs 692). The engine's own ranking (native first when present) is right.
+- The SLOW_JIT cliff line prints in every cell including the native ones, which confirms once more that it is a compiler-identity label.
+- The VM costs nothing on prefill (698 vs the host's 710 at 8 threads).

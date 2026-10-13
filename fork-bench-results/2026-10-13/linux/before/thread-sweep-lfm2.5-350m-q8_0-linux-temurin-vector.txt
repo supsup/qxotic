@@ -1,0 +1,19 @@
+# branch fixpoint/bench-thread-sweep
+# commit 02ada9895
+# command java --add-modules jdk.incubator.vector,jdk.httpserver --enable-native-access=ALL-UNNAMED -Djdk.incubator.vector.VECTOR_ACCESS_OOB_CHECK=0 -Djam.native.disabled=true -jar /build/jars/jinfer-bench-vector.jar -m /models/LFM2.5-350M-Q8_0.gguf -p 512 -n 128 -r 5 -w 2 --threads-sweep 1,2,4,6,8
+# machine Linux 7.2.9-orbstack-00391-g2b298d05fbd4 aarch64; nproc=8; MemTotal=24641588 kB; host: Darwin 27.0.0 arm64; hw.model=Mac17,6; hw.ncpu=18; hw.perflevel0.physicalcpu=6; hw.memsize=137438953472
+# jvm openjdk version "25.0.4.1" 2026-08-18 LTS
+# jam backends vector, scalar
+# date 2026-10-13 04:12Z
+# container image=qxotic-bench:temurin id=sha256:b11576b26982bb25a0effba71932b62241c6f7fd1d7d5109299173801b9f7396 cpus=8 memory=16g docker=29.8.2
+# os Ubuntu 26.04.1 LTS
+# cliff WARNING: perf cliff [SLOW_JIT]: this JVM's JIT compiles the incubating Vector API kernels conservatively - correct, but below their full potential for quantized decode and prefill; the Graal JIT compiles them fully and is where these kernels run fastest today (reported once per JVM run)
+jinfer-bench 0.3.1 | runtime: C2 (Vector API kernels de-intrinsified) | jam: vector, scalar | threads: 1,2,4,6,8 (sweep; all = engine default 8)
+| model            | threads |           pp t/s |           tg t/s | tg speedup | pp speedup |
+| ---------------- | ------: | ---------------: | ---------------: | ---------: | ---------: |
+| LFM2.5-350M-Q8_0 |       1 |    128.76 ± 0.71 |      7.00 ± 0.02 |      1.00x |      1.00x |
+| LFM2.5-350M-Q8_0 |       2 |    228.38 ± 3.35 |     13.39 ± 0.17 |      1.91x |      1.77x |
+| LFM2.5-350M-Q8_0 |       4 |    378.94 ± 8.16 |     25.03 ± 0.31 |      3.58x |      2.94x |
+| LFM2.5-350M-Q8_0 |       6 |    576.29 ± 2.87 |     34.54 ± 0.84 |      4.93x |      4.48x |
+| LFM2.5-350M-Q8_0 |       8 |   697.51 ± 12.04 |     41.51 ± 4.76 |      5.93x |      5.42x |
+plateau: tg within 5% of max from 8 threads (largest count: lower bound only)

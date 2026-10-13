@@ -174,7 +174,9 @@ echo "run-container.sh: $branch $commit" >&2
 echo "run-container.sh: container $name, image $image, cpus $cpus, memory $memory" >&2
 
 # Everything below the INNER marker runs inside the container. The heredoc is quoted: nothing in it
-# is expanded on the host.
+# is expanded on the host. The script arrives on the container's stdin (bash -s), so every child
+# that might read stdin (Maven, java) gets </dev/null: on the first run Maven swallowed the rest of
+# the script and bash exited 0 after the first build with nothing measured (2026-10-13).
 "$@" <<'INNER'
 set -euo pipefail
 
@@ -201,11 +203,11 @@ tar -C /src \
 # Vector FIRST: jam-native/dist does not exist yet, so -Djam.native.skip=true has no pre-staged
 # library to reuse and the jar carries the Java backends only.
 say "building the bench jar with -Djam.native.skip=true"
-make -C /build/src bench-jar MAVEN_FLAGS="-B -Djam.native.skip=true" >&2
+make -C /build/src bench-jar MAVEN_FLAGS="-B -Djam.native.skip=true" </dev/null >&2
 cp /build/src/bin/jinfer-bench.jar /build/jars/jinfer-bench-vector.jar
 
 say "building the bench jar with jam-native (cmake)"
-make -C /build/src bench-jar MAVEN_FLAGS="-B" >&2
+make -C /build/src bench-jar MAVEN_FLAGS="-B" </dev/null >&2
 cp /build/src/bin/jinfer-bench.jar /build/jars/jinfer-bench-native.jar
 
 # ---- 3. provenance that is only visible from inside ----
@@ -239,7 +241,7 @@ sweep() {
     tmp=$(mktemp -d /tmp/qxotic-bench.XXXXXX)
     say "backend $backend: $command_line"
     status=0
-    "$@" 2>&1 >"$tmp/stdout" | tee "$tmp/stderr" >&2 || status=$?
+    "$@" </dev/null 2>&1 >"$tmp/stdout" | tee "$tmp/stderr" >&2 || status=$?
 
     bench_header=$(grep -m 1 '^jinfer-bench ' "$tmp/stdout" || true)
     backends=$(printf '%s\n' "$bench_header" | awk -F' [|] ' '{ for (i = 1; i <= NF; i++) if ($i ~ /^jam: /) { sub(/^jam: /, "", $i); print $i } }')
