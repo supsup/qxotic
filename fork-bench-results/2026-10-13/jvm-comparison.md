@@ -26,7 +26,7 @@ H3, GraalVM CE 25.0.0: 1 thread pp 71.2 tok/s (half of the others), then tg128 w
 
 (filled in below from the 01:22Z run)
 
-Run at 01:22Z with the jfr-metrics jar (319d97e15), 4 threads, pp512 tg128 r3 w2, -XX:StartFlightRecording settings=profile. Recordings: fork-bench-results/2026-10-13/jfr/corretto-25.0.2-c2-t4.jfr (8.5 MB) and graalce-25.4.4.1-t4.jfr (1.4 MB); read with `jfr view hot-methods | allocation-by-class | gc-pauses | compiler-statistics`.
+Run at 01:22Z with the jfr-metrics jar (319d97e15; that branch has no bench-jar Makefile target and no --threads-sweep: build with `mvn -pl jinfer/jinfer-bench -am clean package -DskipTests -Djam.native.skip=true`, run with -t 4), 4 threads, pp512 tg128 r3 w2, -XX:StartFlightRecording settings=profile. Recordings: fork-bench-results/2026-10-13/jfr/corretto-25.0.2-c2-t4.jfr (8.5 MB) and graalce-25.4.4.1-t4.jfr (1.4 MB); read with `jfr view hot-methods | allocation-by-class | gc-pauses | compiler-statistics`.
 
 ### Where the time goes (jfr view hot-methods, 4 threads)
 
@@ -75,15 +75,32 @@ On both JITs the NEON register tile is no faster than the scalar kernel (C2 32.2
 | both | the two above together | 85.4 |
 | (reference) GraalVM CE 25.4.4.1, default | | 103.1 |
 
-Product-build inlining flags alone recover 2.7x of C2 decode on this machine, to 84 percent of the Graal JIT's number, with no code change. That settles the mechanism: C2 stops inlining the Vector API chain inside the large band kernel (hot method too big, NodeCountInliningCutoff, InlineSmallCode), the FloatVectors are boxed across the call, and every op downstream runs the Java fallback with a heap allocation. It is not a NEON instruction-selection problem and not a missing intrinsic. Turning off tiered compilation helps a little (fewer profile-driven recompiles) and adds nothing on top of the budget flags.
+Product-build inlining flags alone recover 2.7x of C2 decode on this machine with no code change. That supports the mechanism (Lattice's independent run, PROJECT/stafficy/37918, reproduces the 2.7x; her phase and denominator objections to the JFR percentages are adopted below): C2 stops inlining the Vector API chain inside the large band kernel (hot method too big, NodeCountInliningCutoff, InlineSmallCode), the FloatVectors are boxed across the call, and every op downstream runs the Java fallback with a heap allocation. It is not a NEON instruction-selection problem and not a missing intrinsic. Turning off tiered compilation helps a little (fewer profile-driven recompiles) and adds nothing on top of the budget flags.
 
 Note the tg-only baseline (32.6) is below the sweep's 4-thread decode (40.2) because the sweep's decode followed a prefill that had already warmed the kernels; compare arms within a table, not across tables.
 
 ## Conclusions
 
-1. On Apple Silicon the engine's SLOW_JIT cliff is real for decode (2.5x) and absent for prefill. Its detector (compiler identity) happens to be right here, by luck not by measurement; a self-timing check (the research note's proposal) would say the same thing for a reason.
-2. The cause is C2's inlining budget on large Vector API kernels, which boxes vectors. Two remedies, both worth an upstream issue: (a) document the C2 flag set above as the supported way to run on OpenJDK/Corretto (it is a one-line JAVA_OPTS change and gives 84 percent of Graal); (b) split BandGemm.sweepPanel33 (725 bytecodes) and the FlashAttention tiles so the inlined Vector API chain fits C2's default budget, which fixes it without flags and would also help x86 C2 users.
+1. On Apple Silicon the engine's SLOW_JIT cliff is real for decode and its size depends on the process history (see Reconciliation): 3.3x when prefill ran first in the same JVM, 1.2x in a decode-only process. For fresh single-phase processes prefill is NOT equal: C2 about 1.45x Graal. Its detector (compiler identity) happens to be right here, by luck not by measurement; a self-timing check (the research note's proposal) would say the same thing for a reason.
+2. The best-supported cause is C2's inlining budget on large Vector API kernels, which boxes vectors (the flag control is the strongest evidence; the JFR percentages are whole-run, not decode-only, and a jdk.CompilerInlining recording is still owed). Two remedies, both worth an upstream issue: (a) document the C2 flag set above as the supported way to run on OpenJDK/Corretto (it is a one-line JAVA_OPTS change and gives 84 percent of Graal); (b) split BandGemm.sweepPanel33 (725 bytecodes) and the FlashAttention tiles so the inlined Vector API chain fits C2's default budget, which fixes it without flags and would also help x86 C2 users.
 3. The 256-bit byte species in Convert.dequantQ8_0Rows is a separate, smaller defect (one embedding row per token; 711 refusals per run; it is also 17 percent of allocation under Graal as Byte256Vector); patched as two SPECIES_128 loads on branch fixpoint/q8-dequant-neon (b9b4393b3), unbuilt and unmeasured.
 4. GraalVM CE 25.0.0 must not be used for decode on this machine (0.06 tok/s). Only the 25.4 line carries the Graal advantage. The version gate in VectorSupport.wideBand (25.4 or newer) is already the right line for a different reason.
 5. Decode is not memory-bound at this model size on this machine (5.3x scaling to 8 threads on both JITs); the author's memory-bound regime needs a larger model or a weaker core.
 6. Not done: Linux container cells, the native matmul backend, an x86 control, llama.cpp on the same Mac, disassembly of the band kernel. All are listed in tools/matrix.md.
+
+## Reconciliation with Lattice's independent run (PROJECT/stafficy/37918, 02:00Z)
+
+Her decode-only arms: Corretto 30.19, Corretto with the flags 81.16, Graal 39.72; prefill-only Corretto 404.08, Graal 291.05. The Graal decode (39.7 against 103.1 above) and prefill (291 against "equal") did not reproduce.
+
+Repeat, fresh JVM each, 4 threads (02:06-02:14Z): Graal decode-only 38.1, 38.7, 40.1, 40.2, 40.1; Graal prefill-only 291.5, 291.0, 291.7, 290.8, 290.0; Corretto decode-only 32.7, 32.6, 32.6. Her numbers, not the ones above.
+
+History control, fresh JVM per arm, twice each (02:15-02:21Z):
+
+| arm | Graal 25.4.4.1 tg128 | Corretto 25.0.2 tg128 |
+|---|---|---|
+| pp512 then tg128 in one JVM | 108.9, 107.5 | 33.0, 33.5 |
+| tg128 alone (-p 0) | 38.4, 40.2 | 33.3, 33.3 |
+
+C2 decode does not depend on what the process ran before. Graal decode does: 108 when the band kernel was compiled during a prefill in the same JVM, 39 when the process only ever decoded. Every fast Graal number above (the sweep H2 column, the JFR run) came from a prefill-first process; every slow one (hers, the repeat, the tile controls) from a decode-only process. Prefill for fresh processes: Graal 281 to 292, Corretto 388 to 427; the sweep's 390 for Graal at 4 threads came after the 1 and 2 thread passes in the same process.
+
+What this changes: the Graal advantage on decode is 3.3x on the prefill-then-decode shape (the shape every chat request has) and 1.2x on a decode-only process. The decode-only bench arm understates Graal and the sweep overstates "fresh" Graal prefill. Why the Graal JIT's compile of the band kernel depends on the first profile it saw is NOT established; the next probe is a jdk.CompilerInlining recording of the two arms. The C2 flag result is unaffected: 2.7x in both labs.
