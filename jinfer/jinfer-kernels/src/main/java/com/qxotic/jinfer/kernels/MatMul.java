@@ -690,13 +690,10 @@ public final class MatMul {
         FloatVector val = FloatVector.zero(F_SPECIES);
         long bo = wByte;
         int j = 0;
-        // The block body is written out per width INSIDE the loop rather than called: C2 declines
-        // to inline a helper that returns a FloatVector once that helper has been compiled on its
-        // own and its machine code exceeds InlineSmallCode (2500 bytes with tiered C2; a block of
-        // Vector API intrinsics is bigger), whatever its bytecode size, and a FloatVector that
-        // crosses a call is materialized per block. Measured on Apple M5 Max, 4 threads,
-        // LFM2.5-350M Q8_0 decode: 31 tok/s through the helper, 86 to 91 with it inlined. The
-        // switch folds at JIT time (F_SPECIES is a static final), so each JIT compiles one loop.
+        // The block body stays inside the loop: C2 will not inline a vector-returning helper that
+        // is over FreqInlineSize bytecodes or, once compiled on its own, over InlineSmallCode, and
+        // a FloatVector that crosses a call is materialized per block. The switch folds at JIT
+        // time (F_SPECIES is a static final), so each JIT compiles one loop.
         switch (F_SPECIES.vectorBitSize()) {
             case 256 -> {
                 for (; j < upperBound; j += Q8_BLOCK, bo += Q8_BLOCK_BYTES) {
@@ -745,6 +742,7 @@ public final class MatMul {
                 }
             }
             default -> {
+                // 512-bit machines take dotQ8_512 from dotQ8 and do not reach this loop.
                 for (; j < upperBound; j += Q8_BLOCK, bo += Q8_BLOCK_BYTES) {
                     val = blockFma(w, bo, x, xByte + 4L * j, val);
                 }
@@ -758,14 +756,10 @@ public final class MatMul {
     }
 
     /**
-     * One Q8_0 block (32 weights) multiplied into the running accumulator. The per-width bodies
-     * live in their own methods, each under C2's hot-site inlining limit (FreqInlineSize, 325
-     * bytecodes on every platform): as one 566-bytecode method C2 reported "hot method too big"
-     * at the dotQ8Generic call site, the returned FloatVector was materialized per block and
-     * every op after it ran the Vector API's Java fallback (decode 31 tok/s against 91 with the
-     * call inlined, Apple M5 Max, 4 threads, LFM2.5-350M Q8_0). {@code @AlwaysInline} is honoured
-     * by the Graal compilers only; C2 needs the size to fit. The switch folds at JIT time because
-     * {@code F_SPECIES} is a static final.
+     * One Q8_0 block (32 weights) multiplied into the running accumulator, one method per vector
+     * width so each stays under C2's hot-site inlining limit (FreqInlineSize). {@code @AlwaysInline}
+     * is honoured by the Graal compilers only; C2 needs the size to fit. The decode loop in
+     * {@link #dotQ8Generic} carries the 128- and 256-bit bodies inline for the same reason.
      */
     @AlwaysInline("hot Vector API leaf: an escaping FloatVector is materialized per call")
     private static FloatVector blockFma(
