@@ -104,3 +104,18 @@ History control, fresh JVM per arm, twice each (02:15-02:21Z):
 C2 decode does not depend on what the process ran before. Graal decode does: 108 when the band kernel was compiled during a prefill in the same JVM, 39 when the process only ever decoded. Every fast Graal number above (the sweep H2 column, the JFR run) came from a prefill-first process; every slow one (hers, the repeat, the tile controls) from a decode-only process. Prefill for fresh processes: Graal 281 to 292, Corretto 388 to 427; the sweep's 390 for Graal at 4 threads came after the 1 and 2 thread passes in the same process.
 
 What this changes: the Graal advantage on decode is 3.3x on the prefill-then-decode shape (the shape every chat request has) and 1.2x on a decode-only process. The decode-only bench arm understates Graal and the sweep overstates "fresh" Graal prefill. Why the Graal JIT's compile of the band kernel depends on the first profile it saw is NOT established; the next probe is a jdk.CompilerInlining recording of the two arms. The C2 flag result is unaffected: 2.7x in both labs.
+
+## Other JDKs (02:21-02:27Z, same jar and model, 4 threads, fresh JVM per arm, sdkman installs)
+
+| JDK | runtime label | decode-only default | decode-only with the six C2 flags | prefill then decode: pp512 / tg128 |
+|---|---|---|---|---|
+| Amazon Corretto 25.0.2 (reference, above) | C2 | 32.6 | 86.7 | 422 / 33.0 |
+| Amazon Corretto 26.0.2 (JDK 26) | C2 | 32.3 | 84.0 | 445 / 32.2 |
+| Eclipse Temurin 25.0.3 | C2 | 32.9 | 85.4 | 403 / 32.2 |
+| GraalVM CE 25.4.4.1 (above) | GraalVM JIT | 38 to 40 | (flags are C2's) | 281 to 289 / 108 |
+| Oracle GraalVM 25.4.4 (java 25.0.4.1.1, the commercial build) | GraalVM JIT | 112.6 | 114.2 (the C2 flags are inert here) | 453 / 110.2 |
+
+Readings:
+- The C2 decode cliff is the same on every HotSpot build, and JDK 26 does not fix it: 32 to 33 default, 84 to 87 with the inlining flags. Vendor and version are ruled out again; the panama-dev report, if filed, is against C2 itself.
+- Oracle GraalVM has NO process-history dependence: decode-only 112.6 and prefill-first 110.2 are the same state, and its prefill (453) is at or above C2's. The decode-only slow state (39) is specific to GraalVM CE 25.4.4.1. The CE compiler lacks the enterprise optimizations of the Oracle build; which one of them is the difference is not established and is the next question for the Graal reading.
+- Best number on this machine tonight, same jar, no flags, no code change: Oracle GraalVM, 453 prefill and 112 decode at 4 threads, against C2's 422 and 33.
