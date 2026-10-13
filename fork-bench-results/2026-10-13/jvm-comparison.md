@@ -187,3 +187,21 @@ Readings:
 - The native backend remains the fast path where it exists: 2.8x the fixed Java decode at 8 threads (343 vs 123) and 2x its prefill (1432 vs 692). The engine's own ranking (native first when present) is right.
 - The SLOW_JIT cliff line prints in every cell including the native ones, which confirms once more that it is a compiler-identity label.
 - The VM costs nothing on prefill (698 vs the host's 710 at 8 threads).
+
+## The native backend on the Mac host (H4 and H5, 04:50-04:52Z): the cell the matrix called impossible
+
+cmake 4.4.4 installed via Homebrew on Charles's word; the sweep worktree (02ada9895) rebuilt with `make bench-jar MAVEN_FLAGS=-B` so cmake built libjam.dylib for darwin-aarch64 and the jar bundles it (`# jam backends native, vector, scalar`). Files under fork-bench-results/2026-10-13/native-mac/.
+
+| threads | Corretto 25.0.2 pp | Corretto tg | GraalVM CE 25.4.4.1 pp | GraalVM tg |
+|---|---|---|---|---|
+| 1 | 1767 | 123.7 | 1699 | 121.2 |
+| 2 | 1951 | 221.6 | 2028 | 219.1 |
+| 4 | 2180 | 318.5 | 2289 | 307.6 |
+| 6 | 2544 | 388.6 | 2480 | 343.3 |
+| 8 | 2148 | 389.6 | 2135 | 414.9 |
+
+Readings:
+- With the C library the Mac is the fastest configuration measured tonight: decode 390 to 415 tok/s at 8 threads against 81 for the fixed Java path (4.8x) and 343 for the Linux container's native; prefill 2.1 to 2.5 thousand tok/s against about 700 on the Java path (3x) and 1,432 in the container.
+- The JIT is irrelevant on this path (Corretto and GraalVM within noise), as expected: the matmuls run in C. The `SLOW_JIT` line still prints under Corretto because it is a compiler-identity label.
+- Prefill is near its peak at ONE thread (1,767) and gains only 1.4x to 8: the native prefill is parallel or memory-bound inside the library, so the thread sweep measures something different here than on the Java path.
+- Who is on the Java path, corrected: upstream's release set (jam/jam-native/scripts/natives.sh, SHIPPED="linux-x86-64 windows-x86-64 darwin-aarch64") bundles libjam for Apple Silicon, so release users on a Mac never hit the C2 cliff. The affected population is source builds without cmake (the README names cmake and a C compiler as required for the native kernels; without them the build silently takes -Djam.native.skip=true's path), anyone passing that flag, and release users on linux-aarch64, which is NOT in the shipped set. Earlier wording in this file and in the issue drafts that said "every macOS build" is superseded by this paragraph.
